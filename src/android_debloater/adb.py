@@ -88,11 +88,10 @@ class Adb:
         if not read_command:
             raise AdbError("This command is not an allowed read-only query.")
         result = self._run(["-s", transport, "shell", *args])
-        # AOSP runGetModuleInfo returns 1 on success. Accept only a complete, validated module list.
+        # AOSP runGetModuleInfo returns 1 on success, including an empty module list.
         module_success = (
             args == ("pm", "get-moduleinfo", "--all")
             and result.code == 1
-            and bool(result.output)
             and all(
                 re.fullmatch(r"ModuleInfo\{[^}]+\}\s+packageName:\s+" + PACKAGE_PATTERN, line)
                 for line in result.output.splitlines()

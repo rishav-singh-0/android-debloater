@@ -41,12 +41,17 @@ def test_module_listing_android_success_exit_one(package):
 
 
 @pytest.mark.parametrize(
-    "output", ["Error: permission denied", "", "ModuleInfo{abc Module} packageName: bad;command"]
+    "output", ["Error: permission denied", "ModuleInfo{abc Module} packageName: bad;command"]
 )
 def test_module_exit_one_still_rejects_invalid_output(output):
     runner = Mock(return_value=subprocess.CompletedProcess([], 1, output, ""))
     with pytest.raises(AdbError):
         Adb("/usr/bin/true", runner=runner).shell("device", "pm", "get-moduleinfo", "--all")
+
+
+def test_empty_module_list_is_a_successful_android_result():
+    runner = Mock(return_value=subprocess.CompletedProcess([], 1, "", ""))
+    assert Adb("/usr/bin/true", runner=runner).shell("device", "pm", "get-moduleinfo", "--all") == ""
 
 
 def test_adb_rejects_shell_injection_and_read_only_mutations():

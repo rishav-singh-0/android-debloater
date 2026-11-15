@@ -70,7 +70,7 @@ CORE_PREFIXES = (
     "com.samsung.android.providers.",
     "com.samsung.android.biometrics.",
 )
-ROLES = ("HOME", "DIALER", "SMS", "BROWSER", "ASSISTANT", "EMERGENCY")
+ROLES = ("HOME", "DIALER", "SMS", "BROWSER", "ASSISTANT", "EMERGENCY", "CALL_SCREENING", "CALL_REDIRECTION")
 
 
 def core_reason(package):
@@ -111,9 +111,10 @@ def parse_role_dump(text, user):
         if match[1] in holders:
             raise AdbError(error)
         holders[match[1]] = (match[2] or "").strip("[]\n").splitlines()
-    if any("android.app.role." + name not in holders for name in ROLES):
+    # Only available roles are dumped; a phone without telephony need not have SMS or DIALER.
+    if "android.app.role.HOME" not in holders:
         raise AdbError(error)
-    return {name: holders["android.app.role." + name] for name in ROLES}
+    return {name.removeprefix("android.app.role."): packages for name, packages in holders.items()}
 
 
 def role_holders(adb, transport, user):
@@ -136,9 +137,14 @@ def role_holders(adb, transport, user):
 def package_dependencies(adb, transport):
     dump = adb.shell(transport, "dumpsys", "package")
     known = re.search(r"^Known Packages:\n(.*?)(?=^\S|\Z)", dump, re.MULTILINE | re.DOTALL)
-    if known:
-        return {line.strip() for line in known[1].splitlines() if PACKAGE_RE.fullmatch(line.strip())}
     error = "Cannot verify package-manager core dependencies."
+    if known:
+        if not re.fullmatch(r"(?:[ \t]+[^:\n]+:\n(?:[ \t]+" + PACKAGE_PATTERN + r"\n)+\n*)+", known[1]):
+            raise AdbError(error)
+        dependencies = {line.strip() for line in known[1].splitlines() if PACKAGE_RE.fullmatch(line.strip())}
+        if "android" not in dependencies:
+            raise AdbError(error)
+        return dependencies - {"none"}
     if adb.shell(transport, "getprop", "ro.build.version.sdk") not in {"29", "30"}:
         raise AdbError(error)
     # Android 10/11 expose verifiers and shared libraries without a Known Packages section.

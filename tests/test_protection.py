@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -106,6 +107,59 @@ def test_legacy_roles_support_multiple_profiles_and_holders():
     assert protected["oplus"] == "Current default sms app."
     assert "com.example.other" not in protected
     assert sum(call[3:] == ["dumpsys", "role"] for call in adb.calls) == 1
+
+
+def test_legacy_devices_without_telephony_roles_still_protect_available_defaults():
+    adb = LegacyRoleAdb()
+    adb.role_dump = re.sub(
+        r"      \{\n        name=android.app.role.(?:DIALER|SMS|EMERGENCY)\n.*?      \}\n",
+        "",
+        ROLE_DUMP,
+        flags=re.DOTALL,
+    )
+    protected = live_protection(adb, "usb-one", 10)
+    assert protected["com.example.home"] == "Current default home app."
+    assert protected["com.example.assistant"] == "Current default assistant app."
+    assert protected["com.example.dialer"] == "Current default call_screening app."
+
+
+@pytest.mark.parametrize(
+    "known",
+    [
+        "",
+        "  System:\n",
+        "  System:\n    android\n  Installer:\n",
+        "  System:\n    android\n  Installer:\n    bad;command\n",
+    ],
+)
+def test_incomplete_modern_dependencies_block_changes(known, monkeypatch):
+    adb = FakeAdb()
+    dump = adb.dump
+    monkeypatch.setattr(
+        adb,
+        "dump",
+        lambda *args: dump(*args).replace(
+            "Known Packages:\n  System:\n    android\n\n", "Known Packages:\n" + known + "\n"
+        ),
+    )
+    with pytest.raises(AdbError, match="core dependencies"):
+        live_protection(adb, "usb-one", 10)
+
+
+def test_modern_dependencies_accept_empty_optional_categories(monkeypatch):
+    adb = FakeAdb()
+    dump = adb.dump
+    monkeypatch.setattr(
+        adb,
+        "dump",
+        lambda *args: dump(*args).replace(
+            "    android\n",
+            "    android\n  OEM installer:\n    com.vendor.installer\n  Retail Demo:\n    none\n",
+        ),
+    )
+    protected = live_protection(adb, "usb-one", 10)
+    assert "com.vendor.installer" in protected
+    assert "none" not in protected
 
 
 @pytest.mark.parametrize(
