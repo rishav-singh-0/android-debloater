@@ -25,6 +25,21 @@ uv run android-debloater --read-only --data-dir .data/personal
 The launcher also accepts `--no-browser`, `--port`, `--adb-path`, and `--data-dir`.
 Stop the server with Ctrl+C. Closing the browser tab leaves it running.
 
+## Phone compatibility
+
+Phone changes require Android 10 or later, authorized ADB access, and a verified
+main personal profile. Support depends on the commands and metadata exposed by the
+firmware. A manufacturer name alone does not establish compatibility.
+
+The app handles older role commands, optional roles and modules, single-segment
+OEM package names, retained records after uninstall, and hidden or archived apps.
+Hidden and archived apps stay protected. A phone in recovery or awaiting
+authorization does not prevent another connected phone from loading.
+
+If a required safety check fails, changes stay blocked with a reason. A readable
+inventory remains available when command-support or protection checks fail.
+Unknown package metadata never falls back to an older factory copy.
+
 ## Use
 
 The app opens your connected phone's app list. If you connect more than one phone,
@@ -132,7 +147,19 @@ node tests/test_frontend.cjs
 Node runs the syntax and frontend checks. The app has no Node build step.
 Tests use a stateful ADB simulator and cover persistence, identity, protection,
 stale reviews, cancellation, interruptions, recovery, and the local HTTP boundary.
-Uninstall and restore still need testing on a real phone. The Linux runtime also
-needs testing.
+The compatibility tests exercise scan, review, uninstall, restore, and restart
+across Android API 29, 30, 31, 33, 34, 35, and 36 protocol variants, including all
+five enabled settings and a main user other than user 0. These are simulations,
+not hardware certification. GitHub Actions runs the checks and build on macOS and Linux.
+
+Real-phone uninstall and restore, Linux runtime use with ADB, and firmware beyond
+the recorded fixtures still need testing. No test suite guarantees every OEM
+firmware or future Android release. Add a sanitized output fixture and a regression
+test when a new device exposes a format difference.
+
+Parser references: Android's [module command](https://android.googlesource.com/platform/frameworks/base/+/android11-release/services/core/java/com/android/server/pm/PackageManagerShellCommand.java#335),
+[role state](https://android.googlesource.com/platform/prebuilts/fullsdk/sources/android-30/+/refs/heads/main/com/android/server/role/RoleUserState.java#479),
+[package dependencies](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/services/core/java/com/android/server/pm/DumpHelper.java#300),
+and [package visibility](https://android.googlesource.com/platform/prebuilts/fullsdk/sources/+/88c7ff1cd72d6305ec59f97aadc2198cc2dc3592/android-34/com/android/server/pm/pkg/PackageUserStateUtils.java).
 
 See [asset notices](src/android_debloater/resources/NOTICE.md) for catalog and font sources.
