@@ -95,6 +95,8 @@ def parse_play(package, html):
         items = (
             data if isinstance(data, list) else data.get("@graph", [data]) if isinstance(data, dict) else []
         )
+        if not isinstance(items, list):
+            continue
         for item in items:
             if not isinstance(item, dict) or item.get("@type") not in (
                 "SoftwareApplication",

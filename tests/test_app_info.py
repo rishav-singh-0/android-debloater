@@ -163,6 +163,36 @@ def make_store(path, count=8):
     return store, device
 
 
+def test_malformed_listing_does_not_abort_other_app_updates(tmp_path):
+    async def scenario():
+        store, device = make_store(tmp_path, 2)
+
+        async def handler(request):
+            if request.url.host == "raw.githubusercontent.com":
+                return httpx.Response(200, json={})
+            package = request.url.params["id"]
+            html = (
+                '<script type="application/ld+json">{"@graph": null}</script>'
+                if package == "com.example.app0"
+                else play_html(package)
+            )
+            return httpx.Response(200, text=html)
+
+        updates = AppInfoUpdates(store, transport=httpx.MockTransport(handler))
+        try:
+            await updates.start(device.id)
+            await asyncio.wait_for(updates.task, 2)
+            job = updates.status()
+            assert not job["error"] and job["checked"] == 2
+            assert job["updated"] == job["failed"] == 1
+            assert "com.example.app1" in store.app_info.packages
+        finally:
+            await updates.close()
+            store.close()
+
+    asyncio.run(scenario())
+
+
 def test_stop_preserves_completed_results_and_cancels_pending_requests(tmp_path):
     async def scenario():
         store, device = make_store(tmp_path)
