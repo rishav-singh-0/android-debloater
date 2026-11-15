@@ -277,3 +277,21 @@ def package_states(text: str, user: int) -> dict[str, Package]:
             else "removed",
         )
     return result
+
+
+def read_package_states(adb, transport, user, installed, name=None):
+    states = package_states(adb.shell(transport, "dumpsys", "package", *((name,) if name else ())), user)
+    if installed != package_list(adb.shell(transport, "pm", "list", "packages", "--user", str(user))):
+        raise AdbError("Package inventory changed during the scan. Scan again.")
+    for package in states.values():
+        # Android can retain installed=true and a stale codePath after a third-party uninstall -k.
+        if (
+            package.installed
+            and package.id not in installed
+            and package.installation == "third-party"
+            and not package.unusual
+        ):
+            package.installed = False
+            package.available = False
+            package.state = "unavailable"
+    return states

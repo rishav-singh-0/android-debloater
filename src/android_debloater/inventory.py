@@ -1,4 +1,4 @@
-from .adb import AdbError, package_list, package_states
+from .adb import AdbError, package_list, read_package_states
 from .models import Device, Package, now
 
 
@@ -8,8 +8,7 @@ def scan(adb, transport: str, user: int) -> dict[str, Package]:
     third = package_list(adb.shell(transport, "pm", "list", "packages", "-3", "--user", str(user)))
     all_packages = package_list(adb.shell(transport, "pm", "list", "packages", "-u", "--user", str(user)))
     disabled = package_list(adb.shell(transport, "pm", "list", "packages", "-d", "--user", str(user)))
-    dump = adb.shell(transport, "dumpsys", "package")
-    states = package_states(dump, user)
+    states = read_package_states(adb, transport, user, installed)
     result = {}
     for name in all_packages.keys() | installed.keys():
         p = states.get(name, Package(id=name, installed=name in installed, available=False))

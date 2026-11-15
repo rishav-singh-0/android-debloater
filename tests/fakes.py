@@ -50,7 +50,7 @@ class FakeAdb(Adb):
                 f"    codePath=/data/app/{package}\n"
                 f"    versionCode={p['version']}\n"
                 f"    pkgFlags=[ {'SYSTEM UPDATED_SYSTEM_APP' if p['system'] else 'HAS_CODE'} ]\n"
-                f"    User {phone['user']}: installed={str(p['installed']).lower()} hidden=false suspended=false enabled={p['enabled']}\n"
+                f"    User {phone['user']}: installed={str(p.get('dump_installed', p['installed'])).lower()} hidden=false suspended=false enabled={p['enabled']}\n"
             )
         return text
 

@@ -1,4 +1,5 @@
 import pytest
+from fakes import FakeAdb
 
 from android_debloater.adb import (
     AdbError,
@@ -9,7 +10,9 @@ from android_debloater.adb import (
     parse_profiles,
 )
 from android_debloater.devices import same_hardware
+from android_debloater.inventory import scan
 from android_debloater.models import Device, Package, ReviewRequest
+from android_debloater.operations import read_package
 
 DUMP = """Packages:
   Package [com.example.updated] (123):
@@ -33,6 +36,62 @@ def test_updated_system_and_disabled_are_independent():
     assert p.state == "installed/disabled"
     assert p.enabled == 3
     assert not package_states(DUMP, 0)
+
+
+@pytest.mark.parametrize("reader", [scan, read_package])
+def test_retained_data_does_not_make_a_removed_app_installed(reader):
+    adb = FakeAdb()
+    name = "com.example.third"
+    adb.phone["one"]["packages"][name].update(installed=False, dump_installed=True)
+    for _ in range(2):
+        package = reader(adb, "usb-one", 10)[name] if reader is scan else reader(adb, "usb-one", 10, name)
+        assert not package.installed and not package.available
+        assert package.state == "unavailable"
+        assert package.installation == "third-party" and package.version == 4
+    assert not adb.mutations
+
+
+@pytest.mark.parametrize("reader", [scan, read_package])
+@pytest.mark.parametrize("installed", [True, False])
+def test_installation_changes_while_reading_still_block(reader, installed, monkeypatch):
+    adb = FakeAdb()
+    name = "com.example.third"
+    package = adb.phone["one"]["packages"][name]
+    package.update(installed=installed, dump_installed=True)
+    shell = adb.shell
+
+    def change_during_dump(transport, *args):
+        output = shell(transport, *args)
+        if args[:2] == ("dumpsys", "package"):
+            package["installed"] = not installed
+        return output
+
+    monkeypatch.setattr(adb, "shell", change_during_dump)
+    with pytest.raises(AdbError, match="changed"):
+        if reader is scan:
+            reader(adb, "usb-one", 10)
+        else:
+            reader(adb, "usb-one", 10, name)
+    assert not adb.mutations
+
+
+@pytest.mark.parametrize("reader", [scan, read_package])
+@pytest.mark.parametrize("mismatch", ["system", "hidden", "installed"])
+def test_other_installation_disagreements_still_block(reader, mismatch, monkeypatch):
+    adb = FakeAdb()
+    name = "com.example.system" if mismatch == "system" else "com.example.third"
+    adb.phone["one"]["packages"][name].update(
+        installed=mismatch == "installed", dump_installed=mismatch != "installed"
+    )
+    dump = adb.dump
+    if mismatch == "hidden":
+        monkeypatch.setattr(adb, "dump", lambda *args: dump(*args).replace("hidden=false", "hidden=true"))
+    with pytest.raises(AdbError, match="changed"):
+        if reader is scan:
+            reader(adb, "usb-one", 10)
+        else:
+            reader(adb, "usb-one", 10, name)
+    assert not adb.mutations
 
 
 def test_single_segment_framework_survives_inventory_and_storage():

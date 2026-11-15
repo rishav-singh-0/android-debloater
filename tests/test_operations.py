@@ -196,6 +196,24 @@ def test_restore_disabled_system_and_manual_third_party(rig):
     assert len(store.get(device_id).history) == 4
 
 
+def test_uninstall_with_retained_data_verifies_and_allows_future_reviews(rig):
+    store, adb, devices, _, device_id = rig
+    adb.phone["one"]["packages"]["com.example.third"]["dump_installed"] = True
+    batch = run(rig, review(rig, ["com.example.third", "com.example.extra"]))
+    assert [entry.status for entry in batch["entries"]] == ["succeeded", "succeeded"]
+    assert len(adb.mutations) == 2
+    devices.refresh(force=True)
+    device = store.get(device_id)
+    assert not device.blockers
+    assert not device.inventory["com.example.third"].installed
+    removed = {row["package"]: row for row in removed_entries(device, True)}
+    assert removed["com.example.third"]["recovery"] == "Manual reinstall required"
+    assert not removed["com.example.third"]["eligible"]
+    plan = review(rig, ["com.example.system", "com.example.third"])
+    assert [package.id for package in plan.packages] == ["com.example.system"]
+    assert "com.example.third" in plan.excluded
+
+
 def test_restore_partial_recovery_keeps_installation_result(rig):
     store, adb, _, _, device_id = rig
     run(rig, review(rig))

@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from threading import Event, RLock, Thread
 
-from .adb import AdbError, package_list, package_states
+from .adb import AdbError, package_list, read_package_states
 from .inventory import removed_entries
 from .models import Operation, Package, Plan, new_id, now
 from .protection import live_protection, reason
@@ -12,7 +12,7 @@ from .storage import StorageError
 
 def read_package(adb, address, user, name, previous=None):
     installed = package_list(adb.shell(address, "pm", "list", "packages", "--user", str(user)))
-    states = package_states(adb.shell(address, "dumpsys", "package", name), user)
+    states = read_package_states(adb, address, user, installed, name)
     package = states.get(name)
     if package is None:
         if name in installed:
