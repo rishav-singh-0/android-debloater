@@ -31,7 +31,13 @@
         <div class="device-actions">
           <label id="phone-choice" hidden><span class="sr-only">Connected phone</span><select id="phone-select"></select></label>
           <button id="scan-button">Refresh</button>
+          <button id="app-info-button" title="Fetch app names, descriptions and categories from Google Play and the UAD-ng catalog">Update app info</button>
         </div>
+      </div>
+      <div id="info-update" class="info-update" hidden>
+        <span id="info-update-status" role="status"></span>
+        <details id="info-update-details" hidden><summary>Details</summary><p id="info-update-errors"></p></details>
+        <button id="info-update-action" class="quiet">Stop</button>
       </div>
       <div id="device-warning" class="warning" hidden></div>
       <div id="batch" class="batch" aria-live="polite" hidden></div>

@@ -1,6 +1,51 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from android_debloater.server import create_app
+
+
+@pytest.mark.parametrize("scope", ["device", "global"])
+def test_partial_edits_preserve_overrides_and_allow_online_updates(tmp_path, scope):
+    from fakes import FakeAdb
+
+    from android_debloater.models import AppInfo
+
+    app = create_app(tmp_path, adb=FakeAdb())
+    base = "http://127.0.0.1:8765"
+    package = "com.example.extra"
+    with TestClient(app, base_url=base) as client:
+        headers = {"Origin": base, "X-Session-Token": app.state.token}
+        device_id = client.post("/api/refresh", json={}, headers=headers).json()["devices"][0]["id"]
+        url = f"/api/devices/{device_id}/overrides/{package}"
+
+        def edit(**fields):
+            assert client.post(url, json={"scope": scope, **fields}, headers=headers).status_code == 200
+
+        def row():
+            return next(
+                p for p in client.get(f"/api/devices/{device_id}").json()["packages"] if p["id"] == package
+            )
+
+        edit(notes="My note")
+        app.state.store.save_app_info(
+            {
+                package: AppInfo(
+                    name="New online name",
+                    description="New description",
+                    purposes=["tools"],
+                    source="Google Play",
+                )
+            }
+        )
+        assert row()["name"] == "New online name" and row()["purposes"] == ["tools"]
+        assert row()["notes"] == "My note"
+        edit(name="Personal name")
+        edit(notes="Updated note")
+        assert row()["name"] == "Personal name" and row()["notes"] == "Updated note"
+        edit(name=None)
+        assert row()["name"] == "New online name" and row()["notes"] == "Updated note"
+        edit()
+        assert row()["notes"] == "" and row()["name"] == "New online name"
 
 
 def test_shared_edits_replace_only_the_edited_local_fields(tmp_path):

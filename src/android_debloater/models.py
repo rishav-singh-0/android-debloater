@@ -143,6 +143,20 @@ class GlobalOverrides(Record):
     packages: dict[PackageId, Override] = Field(default_factory=dict)
 
 
+class AppInfo(Record):
+    name: str | None = Field(default=None, max_length=120)
+    description: str = Field(min_length=1, max_length=12000)
+    purposes: Purposes | None = None
+    category: str = Field(default="", max_length=80)
+    source: Literal["Google Play", "UAD-ng"]
+    fetched_at: str = Field(default_factory=now, max_length=64)
+
+
+class OnlineCatalog(Record):
+    schema_version: Literal[1] = 1
+    packages: dict[PackageId, AppInfo] = Field(default_factory=dict)
+
+
 class ReviewRequest(Record):
     action: Literal["uninstall", "restore"]
     packages: list[PackageId] = Field(min_length=1, max_length=1000)

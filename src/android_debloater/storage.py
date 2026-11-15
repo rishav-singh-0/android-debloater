@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from .models import Device, GlobalOverrides, Record, Settings
+from .models import AppInfo, Device, GlobalOverrides, OnlineCatalog, Record, Settings
 
 
 class StorageError(RuntimeError):
@@ -24,6 +24,7 @@ class Store:
         self.records: dict[str, Device] = {}
         self.settings = Settings()
         self.overrides = GlobalOverrides()
+        self.app_info = OnlineCatalog()
 
     def open(self):
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -38,6 +39,7 @@ class Store:
         for name, model, attr in [
             ("settings.json", Settings, "settings"),
             ("category-overrides.json", GlobalOverrides, "overrides"),
+            ("app-info.json", OnlineCatalog, "app_info"),
         ]:
             path = self.directory / name
             if path.exists():
@@ -119,3 +121,10 @@ class Store:
         with self.mutex:
             self._write(self.directory / "category-overrides.json", overrides, "category-overrides.json")
             self.overrides = overrides
+
+    def save_app_info(self, packages: dict[str, AppInfo]):
+        with self.mutex:
+            catalog = self.app_info.model_copy(deep=True)
+            catalog.packages.update(packages)
+            self._write(self.directory / "app-info.json", catalog, "app-info.json")
+            self.app_info = catalog

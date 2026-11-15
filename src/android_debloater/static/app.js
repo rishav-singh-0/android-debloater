@@ -10,6 +10,7 @@ const state = {
   devices: [], current: null, detail: null, tab: 'installed', selected: new Set(), inspecting: null,
   detailSignature: null, deviceSignature: null, settings: {}, busy: false, activeBatch: null,
   batchBusy: false, reviewBusy: false, loadVersion: 0, rows: [],
+  infoJob: null, infoStarting: false, infoBusy: false, infoVersion: 0, infoApplied: null, infoDismissed: null,
   dismissedNotice: null, editOriginal: null
 };
 const date = value => value ? new Date(value).toLocaleString([], {dateStyle:'medium', timeStyle:'short'}) : 'Never';
@@ -107,6 +108,7 @@ async function loadDevice() {
   if (!detail.connected) { selectPhone(null); return; }
   const signature = JSON.stringify({...detail, device:{...detail.device, last_seen:null}});
   state.detail = detail;
+  renderInfoUpdate();
   if (signature === state.detailSignature) return;
   state.detailSignature = signature;
   $('#empty-device').hidden = true;
@@ -192,7 +194,7 @@ function inspect(id) {
   const tags = [appType(p.installation), status(p.state), ...p.purposes.map(tag => categories[tag])];
   $('#app-details').innerHTML = `<h2 id="app-title">${e(p.name)}</h2><p class="package-id">${e(p.id)}</p><button class="quiet copy" id="copy-package">Copy package ID</button>
     <div class="detail-tags">${tags.map(t => `<span class="tag">${e(t)}</span>`).join('')}</div>
-    <p class="app-description">${e(p.purpose)}</p>${p.protection ? `<p class="warning">${e(p.protection)}</p>` : ''}
+    <p class="app-description">${e(p.purpose)}</p>${p.info_url ? `<p class="info-source"><a href="${e(p.info_url)}" target="_blank" rel="noopener noreferrer">${e(p.info_source)}</a>${p.info_category ? ' · ' + e(p.info_category) : ''} · Updated ${e(date(p.info_fetched_at))}</p>` : ''}${p.protection ? `<p class="warning">${e(p.protection)}</p>` : ''}
     <section><h3>If you uninstall</h3><p>${e(p.impact)}</p></section>
     <section><h3>Getting it back</h3><p>${e(recovery)}</p>${removed ? `<p>Removed ${e(date(removed.removed_at))}</p>` : ''}${removed && p.installer === 'com.android.vending' ? `<a href="https://play.google.com/store/apps/details?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener noreferrer">Find on Google Play</a>` : ''}</section>
     ${p.notes ? `<section><h3>Your notes</h3><p>${e(p.notes)}</p></section>` : ''}
@@ -322,6 +324,54 @@ async function pollBatch() {
     if (!state.activeBatch.running) { await loadDevice(); await refresh(true); }
   } finally { state.batchBusy = false; }
 }
+function renderInfoUpdate() {
+  const job = state.infoJob;
+  $('#app-info-button').disabled = state.infoStarting || !!job?.running || !state.detail?.packages.length;
+  $('#app-info-button').setAttribute('aria-busy', String(state.infoStarting || !!job?.running));
+  $('#info-update').hidden = !job || job.id === state.infoDismissed;
+  if (!job) return;
+  let message = job.running
+    ? `${job.stop_requested ? 'Stopping update…' : 'Updating app info…'} ${job.checked} / ${job.total}`
+    : `${job.error ? 'Update failed. ' : job.stop_requested ? 'Update stopped. ' : ''}Updated info for ${job.updated} ${job.updated === 1 ? 'app' : 'apps'}.`;
+  if (!job.running && job.not_found) message += ` ${job.not_found} not found.`;
+  if (!job.running && job.failed) message += ` ${job.failed} couldn't be checked.`;
+  if (job.device_id !== state.current) message = `${job.device_name}: ${message}`;
+  $('#info-update-status').textContent = message;
+  const errors = [job.error, ...job.warnings].filter(Boolean);
+  $('#info-update-details').hidden = !errors.length;
+  $('#info-update-errors').textContent = errors.join(' ');
+  $('#info-update-action').textContent = job.running ? 'Stop' : 'Dismiss';
+  $('#info-update-action').disabled = job.running && job.stop_requested;
+}
+async function updateAppInfo() {
+  if (!state.current || state.infoStarting || state.infoJob?.running) return;
+  state.infoStarting = true;
+  state.infoVersion++;
+  renderInfoUpdate();
+  try {
+    state.infoJob = await api(`/api/devices/${state.current}/app-info`, {});
+    state.infoDismissed = null;
+  } finally {
+    state.infoStarting = false;
+    renderInfoUpdate();
+  }
+}
+async function pollAppInfo() {
+  if (state.infoBusy || state.infoStarting) return;
+  state.infoBusy = true;
+  const version = state.infoVersion;
+  try {
+    const job = await api('/api/app-info');
+    if (version !== state.infoVersion) return;
+    state.infoJob = job;
+    renderInfoUpdate();
+    const revision = job ? `${job.id}:${job.updated}` : null;
+    if (job?.updated && revision !== state.infoApplied && !state.reviewBusy && !$('dialog[open]')) {
+      await loadDevice();
+      state.infoApplied = revision;
+    }
+  } finally { state.infoBusy = false; }
+}
 async function openSettings() {
   state.settings = await api('/api/settings');
   const s = state.settings, d = state.detail?.device;
@@ -401,6 +451,14 @@ $$('[data-tab]').forEach(button => button.onclick = () => {
 $('#phone-select').onchange = handle(async event => { selectPhone(event.target.value); await loadDevice(); });
 $('#empty-refresh').onclick = handle(() => refresh(true));
 $('#scan-button').onclick = handle(() => refresh(true));
+$('#app-info-button').onclick = handle(updateAppInfo);
+$('#info-update-action').onclick = handle(async () => {
+  if (state.infoJob?.running) {
+    state.infoVersion++;
+    state.infoJob = await api('/api/app-info/stop', {});
+  } else state.infoDismissed = state.infoJob?.id;
+  renderInfoUpdate();
+});
 $('#settings-button').onclick = handle(openSettings);
 $('#dismiss-notice').onclick = () => {
   state.dismissedNotice = $('#notice-message').textContent;
@@ -433,8 +491,10 @@ async function start() {
   $('#mode').hidden = !state.settings.read_only;
   const current = await api('/api/batches/current');
   if (current?.id) { state.activeBatch = current; renderBatch(); }
+  await pollAppInfo();
   await refresh(true);
 }
 handle(start)();
 setInterval(handle(() => { if (!document.hidden && !$('dialog[open]')) return refresh(); }, true), 15000);
 setInterval(handle(pollBatch, true), 1000);
+setInterval(handle(() => { if (!document.hidden) return pollAppInfo(); }, true), 2000);

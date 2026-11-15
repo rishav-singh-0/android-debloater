@@ -91,6 +91,16 @@ def test_old_categories_load_without_rewriting_files_or_losing_history(tmp_path)
                 package: {"purposes": ["utilities", "backup", "security", "health", "navigation"]},
             },
         },
+        tmp_path / "app-info.json": {
+            "schema_version": 1,
+            "packages": {
+                package: {
+                    "description": "Saved description",
+                    "source": "Google Play",
+                    "purposes": ["games", "media"],
+                }
+            },
+        },
     }
     for path, value in paths.items():
         path.parent.mkdir(exist_ok=True)
@@ -104,6 +114,7 @@ def test_old_categories_load_without_rewriting_files_or_losing_history(tmp_path)
         assert saved.overrides[package].purposes == ["money"]
         assert saved.overrides[package].notes == "Keep this app"
         assert store.overrides.packages[package].purposes == ["tools"]
+        assert store.app_info.packages[package].purposes == ["entertainment"]
         assert saved.history == device.history
         assert all(path.read_bytes() == originals[path] for path in paths)
         store.save(saved)

@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .adb import Adb, AdbError
+from .app_info import AppInfoUpdates
 from .catalog import Catalog
 from .devices import Devices
 from .inventory import removed_entries
@@ -19,18 +20,19 @@ from .protection import reason
 from .storage import StorageError, Store
 
 
-def create_app(data_dir: Path, *, port=8765, adb_path=None, read_only=False, adb=None):
+def create_app(data_dir: Path, *, port=8765, adb_path=None, read_only=False, adb=None, info_transport=None):
     store = Store(data_dir)
     catalog = Catalog()
     devices = None
     operations = None
+    app_info = None
     token = secrets.token_urlsafe(32)
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     origins = {f"http://{host}" for host in allowed_hosts}
 
     @asynccontextmanager
     async def lifespan(app):
-        nonlocal devices, operations
+        nonlocal devices, operations, app_info
         store.open()
         try:
             devices = Devices(store, adb or Adb(adb_path or store.settings.adb_path, read_only=read_only))
@@ -39,8 +41,12 @@ def create_app(data_dir: Path, *, port=8765, adb_path=None, read_only=False, adb
             app.state.devices = devices
             operations = Operations(devices)
             app.state.operations = operations
+            app_info = AppInfoUpdates(store, transport=info_transport)
+            app.state.app_info = app_info
             yield
         finally:
+            if app_info:
+                await app_info.close()
             if operations:
                 operations.close()
             store.close()
@@ -123,12 +129,13 @@ def create_app(data_dir: Path, *, port=8765, adb_path=None, read_only=False, adb
     @app.get("/api/devices/{device_id}")
     def detail(device_id: str):
         device = store.get(device_id)
+        online = store.app_info.packages
         packages = []
         for package in device.inventory.values():
             packages.append(
                 {
                     **package.model_dump(),
-                    **catalog.describe(package.id, device.overrides, store.overrides.packages),
+                    **catalog.describe(package.id, device.overrides, store.overrides.packages, online),
                     "protection": reason(package, device.protection),
                 }
             )
@@ -138,6 +145,18 @@ def create_app(data_dir: Path, *, port=8765, adb_path=None, read_only=False, adb
             "removed": removed_entries(device, devices.connected(device_id)),
             "connected": devices.connected(device_id),
         }
+
+    @app.post("/api/devices/{device_id}/app-info", status_code=202)
+    async def update_app_info(device_id: str):
+        return await app_info.start(device_id)
+
+    @app.get("/api/app-info")
+    async def app_info_status():
+        return app_info.status()
+
+    @app.post("/api/app-info/stop")
+    async def stop_app_info():
+        return app_info.stop()
 
     @app.post("/api/devices/{device_id}/nickname")
     def nickname(device_id: str, body: NicknameRequest):

@@ -139,7 +139,8 @@ class Devices:
                         )
                         continue
                     if not matches and any(
-                        k not in {"settings.json", "category-overrides.json"} for k in self.store.errors
+                        k not in {"settings.json", "category-overrides.json", "app-info.json"}
+                        for k in self.store.errors
                     ):
                         raise StorageError(
                             "Resolve unreadable device records before creating a new device history."
