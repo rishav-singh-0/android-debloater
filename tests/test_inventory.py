@@ -121,22 +121,57 @@ def test_installation_changes_while_reading_still_block(reader, installed, monke
 
 
 @pytest.mark.parametrize("reader", [scan, read_package])
-@pytest.mark.parametrize("mismatch", ["system", "hidden", "installed"])
-def test_other_installation_disagreements_still_block(reader, mismatch, monkeypatch):
+@pytest.mark.parametrize("mismatch", ["system", "installed"])
+def test_other_installation_disagreements_still_block(reader, mismatch):
     adb = FakeAdb()
     name = "com.example.system" if mismatch == "system" else "com.example.third"
     adb.phone["one"]["packages"][name].update(
         installed=mismatch == "installed", dump_installed=mismatch != "installed"
     )
-    dump = adb.dump
-    if mismatch == "hidden":
-        monkeypatch.setattr(adb, "dump", lambda *args: dump(*args).replace("hidden=false", "hidden=true"))
     with pytest.raises(AdbError, match="changed"):
         if reader is scan:
             reader(adb, "usb-one", 10)
         else:
             reader(adb, "usb-one", 10, name)
     assert not adb.mutations
+
+
+def test_hidden_package_does_not_block_unrelated_apps(tmp_path, monkeypatch):
+    from android_debloater.devices import Devices
+    from android_debloater.operations import Operations
+    from android_debloater.storage import Store
+
+    adb = FakeAdb()
+    name = "com.example.third"
+    adb.phone["one"]["packages"][name].update(installed=False, dump_installed=True)
+    dump = adb.dump
+
+    def hidden_package(phone, package=None):
+        output = dump(phone, package)
+        start = output.find(f"  Package [{name}]")
+        if start != -1:
+            output = output[:start] + output[start:].replace("hidden=false", "hidden=true", 1)
+        return output
+
+    monkeypatch.setattr(adb, "dump", hidden_package)
+    store = Store(tmp_path)
+    store.open()
+    try:
+        devices = Devices(store, adb)
+        devices.refresh(force=True)
+        device = store.all()[0]
+        assert not device.blockers
+        assert device.inventory[name].unusual and device.inventory[name].installed
+        plan = Operations(devices).review(
+            device.id, ReviewRequest(action="uninstall", packages=[name, "com.example.extra"])
+        )
+        assert [p.id for p in plan.packages] == ["com.example.extra"]
+        assert "Hidden" in plan.excluded[name]
+        with pytest.raises(AdbError, match="changed"):
+            read_package(adb, "usb-one", 10, name)
+        assert not adb.mutations
+    finally:
+        store.close()
 
 
 def test_single_segment_framework_survives_inventory_and_storage():

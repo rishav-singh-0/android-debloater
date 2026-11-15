@@ -12,8 +12,12 @@ def scan(adb, transport: str, user: int) -> dict[str, Package]:
     result = {}
     for name in all_packages.keys() | installed.keys():
         p = states.get(name, Package(id=name, installed=name in installed, available=False))
+        # Android omits hidden apps from ordinary lists; keep them visible and protected.
+        if p.unusual and p.installed != (name in installed):
+            p.state = "unverified"
         if (
             p.installed != (name in installed)
+            and not p.unusual
             or name in system
             and p.installation == "third-party"
             or name in third
