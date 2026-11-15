@@ -6,9 +6,9 @@ from uuid import uuid4
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-PackageId = Annotated[
-    str, Field(pattern=r"^(?:android|[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)$", max_length=255)
-]
+# OEM framework packages such as "oplus" can have a single-segment name.
+PACKAGE_PATTERN = r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*"
+PackageId = Annotated[str, Field(pattern=f"^{PACKAGE_PATTERN}$", max_length=255)]
 Purpose = Literal["communication", "money", "entertainment", "tools", "system", "other"]
 LEGACY_PURPOSES = {
     "social": "communication",

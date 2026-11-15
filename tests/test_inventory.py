@@ -9,7 +9,7 @@ from android_debloater.adb import (
     parse_profiles,
 )
 from android_debloater.devices import same_hardware
-from android_debloater.models import Device
+from android_debloater.models import Device, Package, ReviewRequest
 
 DUMP = """Packages:
   Package [com.example.updated] (123):
@@ -33,6 +33,60 @@ def test_updated_system_and_disabled_are_independent():
     assert p.state == "installed/disabled"
     assert p.enabled == 3
     assert not package_states(DUMP, 0)
+
+
+def test_single_segment_framework_survives_inventory_and_storage():
+    from android_debloater.protection import reason
+
+    listing = package_list("package:oplus\npackage:com.example.app")
+    assert set(listing) == {"oplus", "com.example.app"}
+    dump = """Packages:
+  Package [oplus] (123):
+    sharedUser=SharedUserSetting{abc android.uid.system/1000}
+    codePath=/system/system_ext/framework/oplus-framework-res.apk
+    versionCode=80 minSdk=30 targetSdk=30
+    pkgFlags=[ SYSTEM PERSISTENT ALLOW_BACKUP ]
+    User 0: installed=true hidden=false suspended=false enabled=0
+"""
+    packages = package_states(dump, 0)
+    framework = packages["oplus"]
+    assert framework.installed and framework.critical
+    assert reason(framework, {})
+    device = Device(inventory=packages)
+    assert Device.model_validate_json(device.model_dump_json()).inventory == packages
+    assert ReviewRequest(action="uninstall", packages=["oplus"]).packages == ["oplus"]
+
+
+def test_single_segment_roles_and_administrators_remain_protected(monkeypatch):
+    from fakes import FakeAdb
+
+    from android_debloater.protection import live_protection
+
+    adb = FakeAdb()
+    adb.phone["one"]["role"] = "oplus"
+    assert live_protection(adb, "usb-one", 10)["oplus"] == "Current default home app."
+    shell = adb.shell
+
+    def with_administrator(transport, *args):
+        output = shell(transport, *args)
+        return output + "\n  oplus/.Admin\n" if args == ("dumpsys", "device_policy") else output
+
+    monkeypatch.setattr(adb, "shell", with_administrator)
+    assert "administrator" in live_protection(adb, "usb-one", 10)["oplus"]
+
+
+@pytest.mark.parametrize("package", ["oplus;reboot", "oplus/path", "-oplus", ".oplus", "oplus..core"])
+def test_package_validation_still_rejects_unsafe_or_malformed_names(package):
+    from pydantic import ValidationError
+
+    from android_debloater.adb import Adb
+
+    with pytest.raises(AdbError):
+        package_list("package:" + package)
+    with pytest.raises(ValidationError):
+        Package(id=package)
+    with pytest.raises(AdbError):
+        Adb().mutation_args("device", "uninstall", 0, package)
 
 
 def test_main_user_is_not_assumed_zero():

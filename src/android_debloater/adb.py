@@ -7,9 +7,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .models import Package, Profile
+from .models import PACKAGE_PATTERN, Package, Profile
 
-PACKAGE_RE = re.compile(r"(?:android|[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\Z")
+PACKAGE_RE = re.compile(PACKAGE_PATTERN + r"\Z")
 SAFE_ARG = re.compile(r"[A-Za-z0-9_./:@=+,-]+\Z")
 ENABLED_COMMANDS = {0: "default-state", 1: "enable", 2: "disable", 3: "disable-user", 4: "disable-until-used"}
 
@@ -73,6 +73,7 @@ class Adb:
             or args[:2] == ("dumpsys", "user")
             or args[:2] == ("dumpsys", "package")
             or args[:2] == ("dumpsys", "device_policy")
+            or args == ("dumpsys", "role")
             or args[:3] == ("pm", "list", "packages")
             or args[:3] == ("pm", "list", "users")
             or args == ("pm", "help")
@@ -93,13 +94,17 @@ class Adb:
             and result.code == 1
             and bool(result.output)
             and all(
-                re.fullmatch(
-                    r"ModuleInfo\{[^}]+\}\s+packageName:\s+([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)", line
-                )
+                re.fullmatch(r"ModuleInfo\{[^}]+\}\s+packageName:\s+" + PACKAGE_PATTERN, line)
                 for line in result.output.splitlines()
             )
         )
-        if (result.code and not module_success) or re.search(
+        # Android 11's help handler returns -1, which ADB reports as 255.
+        help_success = (
+            args == ("pm", "help")
+            and result.code == 255
+            and result.output.startswith("Package manager (package) commands:\n")
+        )
+        if (result.code and not module_success and not help_success) or re.search(
             r"(?im)^(?:error|failure|exception|unknown command|unknown option|java\.)", result.output
         ):
             raise AdbError(result.output[:1500] or "ADB query failed.")

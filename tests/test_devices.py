@@ -29,6 +29,39 @@ def test_android_identity_accepts_short_hex_values_and_rejects_invalid_values(an
     assert bool(info["blockers"]) != valid
 
 
+def test_android_11_oem_inventory_is_saved(tmp_path, monkeypatch):
+    adb = FakeAdb()
+    adb.phone["one"]["packages"]["oplus"] = {"system": True, "installed": True, "enabled": 0, "version": 80}
+    run = adb._run
+
+    def android_11_help(args, timeout=30):
+        result = run(args, timeout)
+        if args[3:] == ["pm", "help"]:
+            result.code = 255
+            result.output = "Package manager (package) commands:\n" + result.output
+        return result
+
+    monkeypatch.setattr(adb, "_run", android_11_help)
+    store = Store(tmp_path)
+    store.open()
+    try:
+        devices = Devices(store, adb)
+        devices.refresh(force=True)
+        device = store.all()[0]
+        assert not device.blockers
+        assert len(device.inventory) == 6
+        assert device.inventory["oplus"].installed
+        assert device.capabilities["uninstall"]
+        assert not adb.mutations
+    finally:
+        store.close()
+    store.open()
+    try:
+        assert store.all()[0].inventory["oplus"].installed
+    finally:
+        store.close()
+
+
 @pytest.mark.parametrize("change", ["version", "firmware", "profile"])
 def test_offline_alias_before_usb_does_not_skip_refresh(tmp_path, monkeypatch, change):
     store = Store(tmp_path)

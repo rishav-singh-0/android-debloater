@@ -6,14 +6,38 @@ import pytest
 from android_debloater.adb import Adb, AdbError
 
 
-def test_module_listing_android_success_exit_one():
+@pytest.mark.parametrize("code", [0, 255])
+def test_package_help_accepts_android_11_exit_status(code):
+    output = "Package manager (package) commands:\n  help\n    Print this help text.\n"
+    runner = Mock(return_value=subprocess.CompletedProcess([], code, output, ""))
+    assert Adb("/usr/bin/true", runner=runner).shell("device", "pm", "help") == output.strip()
+
+
+@pytest.mark.parametrize(
+    ("code", "output", "command"),
+    [
+        (255, "", ("pm", "help")),
+        (255, "Error: permission denied", ("pm", "help")),
+        (1, "Package manager (package) commands:\n  help", ("pm", "help")),
+        (255, "Package manager (package) commands:\nError: permission denied", ("pm", "help")),
+        (255, "Package manager (package) commands:\n  help", ("pm", "list", "packages")),
+    ],
+)
+def test_help_exception_does_not_hide_command_failures(code, output, command):
+    runner = Mock(return_value=subprocess.CompletedProcess([], code, output, ""))
+    with pytest.raises(AdbError):
+        Adb("/usr/bin/true", runner=runner).shell("device", *command)
+
+
+@pytest.mark.parametrize("package", ["com.example.module", "oplus"])
+def test_module_listing_android_success_exit_one(package):
     runner = Mock(
         return_value=subprocess.CompletedProcess(
-            [], 1, "ModuleInfo{abc Module} packageName: com.example.module\n", ""
+            [], 1, f"ModuleInfo{{abc Module}} packageName: {package}\n", ""
         )
     )
     adb = Adb("/usr/bin/true", runner=runner)
-    assert "com.example.module" in adb.shell("device", "pm", "get-moduleinfo", "--all")
+    assert package in adb.shell("device", "pm", "get-moduleinfo", "--all")
 
 
 @pytest.mark.parametrize(

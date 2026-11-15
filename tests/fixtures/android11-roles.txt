@@ -1,0 +1,36 @@
+ROLE MANAGER STATE (dumpsys role):
+{
+  user_states={
+    user_id=10
+    version=-1
+    packages_hash=0123456789ABCDEF
+    roles=[
+      {
+        name=android.app.role.CALL_SCREENING
+        holders=com.example.dialer
+      }
+      {
+        name=android.app.role.HOME
+        holders=com.example.home
+      }
+      {
+        name=android.app.role.DIALER
+        holders=com.example.dialer
+      }
+      {
+        name=android.app.role.SMS
+        holders=com.example.sms
+      }
+      {
+        name=android.app.role.BROWSER
+      }
+      {
+        name=android.app.role.ASSISTANT
+        holders=com.example.assistant
+      }
+      {
+        name=android.app.role.EMERGENCY
+      }
+    ]
+  }
+}
