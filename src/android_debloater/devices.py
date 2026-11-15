@@ -200,8 +200,9 @@ class Devices:
             self.transports, self.pending, self.error = transports, pending, error
 
     def scan_device(self, device, address, user):
+        device.capabilities = {}
         try:
-            inventory = scan(self.adb, address, user)
+            reconcile(device, scan(self.adb, address, user))
             help_text = self.adb.shell(address, "pm", "help")
             uninstall = re.search(r"uninstall \[-k\].*?(?=\n\s*\n|\Z)", help_text, re.DOTALL)
             device.capabilities = {
@@ -213,7 +214,6 @@ class Devices:
                     for command in ["default-state", "disable-user", "disable-until-used", "enable"]
                 ),
             }
-            reconcile(device, inventory)
             try:
                 device.protection = live_protection(self.adb, address, user)
             except AdbError as exc:

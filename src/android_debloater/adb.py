@@ -147,18 +147,34 @@ def parse_devices(text):
         if not line.strip() or line.startswith(("List of devices", "*")):
             continue
         parts = line.split()
-        if len(parts) < 2 or parts[1] not in {"device", "offline", "unauthorized", "no"}:
+        states = {
+            "device": "Connected",
+            "offline": "Offline",
+            "unauthorized": "Needs authorization",
+            "no": "Needs authorization",
+            "authorizing": "Authorizing",
+            "connecting": "Connecting",
+            "recovery": "Recovery",
+            "sideload": "Sideload",
+            "bootloader": "Bootloader",
+            "rescue": "Rescue",
+            "host": "Unavailable",
+            "unknown": "Unavailable",
+        }
+        if len(parts) < 2 or parts[1] not in states:
             raise AdbError("Unrecognized device state: " + line[:200])
         info = dict(item.split(":", 1) for item in parts[2:] if ":" in item)
         result.append(
             {
                 "transport": parts[0],
-                "state": {
-                    "device": "Connected",
-                    "offline": "Offline",
-                    "unauthorized": "Needs authorization",
-                    "no": "Needs authorization",
-                }[parts[1]],
+                "state": states[parts[1]],
+                "reason": ""
+                if parts[1] == "device"
+                else (
+                    "ADB reports "
+                    + states[parts[1]].lower()
+                    + ". Start Android normally, unlock the phone, authorize USB debugging, then refresh."
+                ),
                 "connection": "USB"
                 if "usb" in info or ":" not in parts[0] and not parts[0].startswith("adb-")
                 else "Wi-Fi",

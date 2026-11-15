@@ -10,6 +10,59 @@ from android_debloater.storage import Store
 
 
 @pytest.mark.parametrize(
+    "state", ["recovery", "sideload", "bootloader", "rescue", "authorizing", "connecting"]
+)
+def test_unready_phone_does_not_hide_another_connected_phone(tmp_path, state):
+    adb = FakeAdb()
+    adb.devices_map["usb-two"] = "two"
+    adb.phone["two"]["state"] = state
+    store = Store(tmp_path)
+    store.open()
+    try:
+        devices = Devices(store, adb)
+        devices.refresh(force=True)
+        assert not devices.error
+        device = store.all()[0]
+        assert devices.connected(device.id) and device.inventory
+        assert len(devices.pending) == 1
+        assert devices.pending[0]["state"] != "Connected"
+        assert devices.pending[0]["reason"]
+        assert not any(call[:2] == ["-s", "usb-two"] for call in adb.calls)
+    finally:
+        store.close()
+
+
+def test_inventory_remains_browsable_when_capability_check_fails(tmp_path, monkeypatch):
+    from android_debloater.models import ReviewRequest
+    from android_debloater.operations import Operations
+
+    adb = FakeAdb()
+    shell = adb.shell
+
+    def without_help(transport, *args):
+        if args == ("pm", "help"):
+            raise AdbError("Package-manager help is unavailable")
+        return shell(transport, *args)
+
+    monkeypatch.setattr(adb, "shell", without_help)
+    store = Store(tmp_path)
+    store.open()
+    try:
+        devices = Devices(store, adb)
+        devices.refresh(force=True)
+        device = store.all()[0]
+        assert len(device.inventory) == 5 and device.scanned_at
+        assert device.blockers and not device.capabilities
+        with pytest.raises(AdbError, match="help is unavailable"):
+            Operations(devices).review(
+                device.id, ReviewRequest(action="uninstall", packages=["com.example.extra"])
+            )
+        assert not adb.mutations
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
     ("android_id", "valid"),
     [
         ("0", True),
