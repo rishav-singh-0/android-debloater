@@ -188,12 +188,48 @@ def test_restore_disabled_system_and_manual_third_party(rig):
     assert "com.example.third" in plan.excluded
     batch = run(rig, plan)
     assert batch["entries"][0].status == "succeeded"
+    assert batch["entries"][0].observed_state == "installed/disabled"
     assert adb.phone["one"]["packages"]["com.example.system"]["enabled"] == 3
     assert len(store.get(device_id).history) == 3
     assert removed_entries(store.get(device_id), True)[0]["recovery"] == "Installed again"
     # Another cycle appends events rather than replacing the old removal.
     run(rig, review(rig))
     assert len(store.get(device_id).history) == 4
+
+
+@pytest.mark.parametrize("change", ["default", "version", "transport"])
+def test_restore_rechecks_before_changing_enabled_state(rig, monkeypatch, change):
+    _, adb, devices, _, _ = rig
+    run(rig, review(rig))
+    plan = review(rig, action="restore")
+    validate = devices.validate
+
+    def change_after_install(device):
+        package = adb.phone["one"]["packages"]["com.example.system"]
+        if package["installed"]:
+            if change == "default":
+                adb.phone["one"]["role"] = "com.example.system"
+            elif change == "version":
+                package["version"] += 1
+            else:
+                adb.devices_map.pop("usb-one", None)
+                devices.transports[device.id] = [
+                    t for t in devices.transports[device.id] if t["connection"] == "Wi-Fi"
+                ]
+        return validate(device)
+
+    monkeypatch.setattr(devices, "validate", change_after_install)
+    batch = run(rig, plan)
+    entry = batch["entries"][0]
+    if change == "transport":
+        assert entry.status == "succeeded"
+        assert adb.mutations[-1][1] == "10.0.0.1:5555"
+        assert entry.observed_state == "installed/disabled"
+    else:
+        assert entry.status == "partial"
+        assert len(adb.mutations) == 2  # Uninstall and install-existing only.
+        assert adb.phone["one"]["packages"]["com.example.system"]["enabled"] == 0
+        assert "incomplete" in entry.verification
 
 
 def test_uninstall_with_retained_data_verifies_and_allows_future_reviews(rig):

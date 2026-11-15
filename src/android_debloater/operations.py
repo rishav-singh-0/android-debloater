@@ -308,7 +308,17 @@ class Operations:
                             self.store.save(device)
                             if after.enabled != entry.previous_enabled:
                                 # The second recovery command has its own durable pre-dispatch record.
-                                self.devices.validate(device)
+                                address = self.devices.validate(device)
+                                protected = live_protection(self.devices.adb, address, plan.user_id)
+                                current = read_package(
+                                    self.devices.adb, address, plan.user_id, snapshot.id, after
+                                )
+                                if not same_package(current, after):
+                                    raise AdbError(
+                                        "Package state changed during restore. Scan and review again."
+                                    )
+                                if problem := reason(current, protected):
+                                    raise AdbError(problem)
                                 entry.command += [
                                     "then",
                                     *self.devices.adb.mutation_args(
@@ -334,6 +344,7 @@ class Operations:
                                     self.devices.adb, address, plan.user_id, snapshot.id, after
                                 )
                                 device.inventory[snapshot.id] = after
+                                entry.observed_state, entry.observed_at = after.state, now()
                                 if enabled_result.code or "new state:" not in enabled_result.output:
                                     raise AdbError(
                                         "Installation succeeded, but the enabled-state command did not report success."
