@@ -38,6 +38,51 @@ def test_updated_system_and_disabled_are_independent():
     assert not package_states(DUMP, 0)
 
 
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "User 10: installed=true hidden=false suspended=false enabled=3",
+        "pkgFlags=[ SYSTEM HAS_CODE UPDATED_SYSTEM_APP ]",
+    ],
+)
+def test_unreadable_current_package_never_uses_hidden_factory_metadata(missing):
+    assert not package_states(DUMP.replace(missing, "unrecognized metadata"), 10)
+
+
+def test_package_metadata_cannot_leak_from_another_dump_section():
+    dump = (
+        DUMP.split("Hidden system packages:")[0].replace(
+            "User 10: installed=true hidden=false suspended=false enabled=3",
+            "User 0: installed=true enabled=0",
+        )
+        + "Shared users:\n  SharedUser [android.uid.system]:\n    User 10: installed=true enabled=0\n"
+    )
+    assert not package_states(dump, 10)
+
+
+@pytest.mark.parametrize("user", [0, 10])
+def test_archived_state_is_scoped_to_its_user(user):
+    dump = DUMP.split("Hidden system packages:")[0] + (
+        "      archiveTime=2025-01-01 10:00:00\n"
+        "      unarchiveInstallerTitle=Store\n"
+        "    User 0: installed=true hidden=false suspended=false enabled=0\n"
+    )
+    package = package_states(dump, user)["com.example.updated"]
+    assert package.unusual == (user == 10)
+
+
+@pytest.mark.parametrize("reader", [scan, read_package])
+def test_duplicate_current_package_records_are_rejected(reader, monkeypatch):
+    adb = FakeAdb()
+    dump = adb.dump
+    monkeypatch.setattr(adb, "dump", lambda *args: dump(*args) + dump(*args).split("\nPackages:\n", 1)[1])
+    with pytest.raises(AdbError, match="Duplicate"):
+        if reader is scan:
+            reader(adb, "usb-one", 10)
+        else:
+            reader(adb, "usb-one", 10, "com.example.third")
+
+
 @pytest.mark.parametrize("reader", [scan, read_package])
 def test_retained_data_does_not_make_a_removed_app_installed(reader):
     adb = FakeAdb()

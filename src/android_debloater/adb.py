@@ -247,15 +247,24 @@ def main_profile(profiles: list[Profile], current: int, reported: int | None):
 
 
 def package_states(text: str, user: int) -> dict[str, Package]:
-    # First current Package block wins; hidden factory copies may follow updated system apps.
-    starts = list(re.finditer(r"^\s{2}Package \[([^\]]+)\].*$", text, re.MULTILINE))
+    # Hidden factory copies and other dump sections must never supply current package metadata.
+    section = re.search(r"^Packages:\n(.*?)(?=^\S|\Z)", text, re.MULTILINE | re.DOTALL)
+    if not section:
+        return {}
     result = {}
-    for index, start in enumerate(starts):
-        name = start[1]
-        if name in result or not PACKAGE_RE.fullmatch(name):
+    seen = set()
+    for match in re.finditer(
+        r"^  Package \[([^\]]+)\][^\n]*\n(.*?)(?=^ {0,2}\S|\Z)", section[1], re.MULTILINE | re.DOTALL
+    ):
+        name, block = match.groups()
+        if name in seen:
+            raise AdbError("Duplicate current package metadata. Scan again.")
+        seen.add(name)
+        if not PACKAGE_RE.fullmatch(name):
             continue
-        block = text[start.end() : starts[index + 1].start() if index + 1 < len(starts) else len(text)]
-        state = re.search(r"^\s+User " + str(user) + r": ([^\n]+)", block, re.MULTILINE)
+        state = re.search(
+            r"^    User " + str(user) + r": ([^\n]+)(.*?)(?=^    \S|\Z)", block, re.MULTILINE | re.DOTALL
+        )
         flags = re.search(r"^\s+(?:pkgFlags|flags)=\[([^]]*)\]", block, re.MULTILINE)
         version = re.search(r"\bversionCode=(\d+)", block)
         installer = re.search(r"\binstallerPackageName=(\S+)", block)
@@ -286,7 +295,8 @@ def package_states(text: str, user: int) -> dict[str, Package]:
                     block,
                 )
             ),
-            unusual=bool(re.search(r"\b(?:hidden|suspended|quarantined|archived)=true", state[1])),
+            unusual=bool(re.search(r"\b(?:hidden|suspended|quarantined|archived)=true", state[1]))
+            or bool(re.search(r"^\s+archiveTime=", state[2], re.MULTILINE)),
             state=("installed/disabled" if int(enabled[1]) in {2, 3, 4} else "installed/enabled")
             if present
             else "removed",
