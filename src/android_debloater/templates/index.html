@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="session-token" content="{{ token }}">
+  <meta name="color-scheme" content="dark">
+  <title>Android Debloater</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#workspace">Skip to apps</a>
+  <header class="app-header">
+    <a class="brand" href="/">Android Debloater</a>
+    <span id="mode" class="tag" hidden>Read-only</span>
+    <button id="settings-button" class="quiet">Settings</button>
+  </header>
+  <main id="workspace" tabindex="-1">
+    <div id="notice" class="notice" hidden><span id="notice-message" role="status"></span><button id="dismiss-notice" class="quiet" aria-label="Dismiss notification">Dismiss</button></div>
+    <div id="connection-help" hidden></div>
+    <section id="empty-device" class="empty-device">
+      <h1>No device connected</h1>
+      <p>Plug in your Android phone and accept the connection prompt.</p>
+      <button id="empty-refresh" class="primary">Search for device</button>
+      <details><summary>Connection help</summary><p>Enable USB debugging in your phone's Developer options, then reconnect it.</p></details>
+    </section>
+    <div id="device-workspace" hidden>
+      <div class="device-heading">
+        <h1 id="device-title"></h1>
+        <div class="device-actions">
+          <label id="phone-choice" hidden><span class="sr-only">Connected phone</span><select id="phone-select"></select></label>
+          <button id="scan-button">Refresh</button>
+        </div>
+      </div>
+      <div id="device-warning" class="warning" hidden></div>
+      <h2>Installed <span id="installed-count"></span></h2>
+      <div id="inventory-view">
+        <div class="search-row">
+          <label class="search"><span class="sr-only">Search apps</span><input id="search" type="search" placeholder="Search apps" autocomplete="off"></label>
+          <label class="category-filter"><span class="sr-only">Category</span><select id="filter-purpose"><option value="">All categories</option></select></label>
+          <button id="filters-button" class="quiet" aria-expanded="false" aria-controls="filters">Filters</button>
+          <span id="result-count" class="results-line" aria-live="polite"></span>
+        </div>
+        <div id="filters" class="filters" hidden>
+          <label>Type<select id="filter-installation"><option value="">All types</option><option value="system">System</option><option value="third-party">Downloaded</option><option value="unknown">Unknown</option></select></label>
+          <label>Usefulness<select id="filter-usefulness"><option value="">Any usefulness</option><option value="essential">Essential</option><option value="optional">Optional</option><option value="suspected bloatware">Suspected bloatware</option><option value="unknown">Unknown</option></select></label>
+          <label>Status<select id="filter-state"><option value="">All statuses</option><option value="installed/enabled">Enabled</option><option value="installed/disabled">Disabled</option><option value="unverified">Needs checking</option></select></label>
+          <label>Sort by<select id="sort"><option value="name">App name</option><option value="id">Package ID</option><option value="installation">Type</option><option value="state">Status</option></select></label>
+          <button id="clear-filters" class="quiet">Reset filters</button>
+        </div>
+        <div class="table-wrap">
+          <table><thead><tr><th>App</th><th class="type-col">Type</th><th class="state-col">Status</th></tr></thead><tbody id="app-rows"></tbody></table>
+          <div id="no-results" class="empty-results" hidden></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <dialog id="inspector" aria-labelledby="app-title"><form method="dialog" class="dialog-close"><button aria-label="Close app details">×</button></form><div id="app-details"></div></dialog>
+  <dialog id="edit-dialog" aria-labelledby="edit-title">
+    <form method="dialog" class="dialog-close"><button aria-label="Close editor">×</button></form>
+    <h2 id="edit-title">Edit app details</h2>
+    <form id="edit-form">
+      <p id="edit-package" class="package-id"></p>
+      <label>App name<input id="edit-name" maxlength="120"></label>
+      <label>Usefulness<select id="edit-usefulness"><option value="essential">Essential</option><option value="optional">Optional</option><option value="suspected bloatware">Suspected bloatware</option><option value="unknown">Unknown</option></select></label>
+      <fieldset><legend>Categories</legend><div id="edit-purposes" class="purpose-options"></div></fieldset>
+      <label>Notes<textarea id="edit-notes" rows="3" maxlength="4000"></textarea></label>
+      <details><summary>More options</summary><label class="checkbox-label"><input id="edit-global" type="checkbox">Use these details for any phone</label></details>
+      <div class="dialog-actions"><button type="button" id="reset-override" class="quiet">Reset</button><button type="submit" class="primary">Save</button></div>
+    </form>
+  </dialog>
+  <dialog id="settings-dialog" aria-labelledby="settings-title"><form method="dialog" class="dialog-close"><button aria-label="Close settings">×</button></form><h2 id="settings-title">Settings</h2><div id="settings-content"></div></dialog>
+  <noscript>Enable JavaScript to view your apps.</noscript>
+</body>
+</html>

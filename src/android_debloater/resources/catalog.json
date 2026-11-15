@@ -1,0 +1,445 @@
+{
+  "version": "2026.11.1",
+  "packages": {
+    "android": {
+      "name": "Android system",
+      "purposes": [
+        "system"
+      ],
+      "purpose": "The Android framework supports apps and device services.",
+      "impact": "Core Android functions depend on this package.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.android.systemui": {
+      "name": "System UI",
+      "purposes": [
+        "system"
+      ],
+      "purpose": "Status bar, notifications, navigation, and lock-screen interface.",
+      "impact": "The phone interface depends on this package.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.android.settings": {
+      "name": "Settings",
+      "purposes": [
+        "system"
+      ],
+      "purpose": "Device settings and system configuration.",
+      "impact": "Device configuration depends on this package.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.google.android.gms": {
+      "name": "Google Play services",
+      "purposes": [
+        "system"
+      ],
+      "purpose": "Shared Google APIs, sign-in, notifications, and location services.",
+      "impact": "Many apps depend on these services.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.android.vending": {
+      "name": "Google Play Store",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Installs and updates apps distributed through Google Play.",
+      "impact": "Store installs, updates, and license checks may stop.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.google.android.webview": {
+      "name": "Android System WebView",
+      "purposes": [
+        "system"
+      ],
+      "purpose": "Displays web content inside other apps.",
+      "impact": "Apps that embed web content may stop working.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.google.android.permissioncontroller": {
+      "name": "Permission controller",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Manages Android app permissions.",
+      "impact": "Permission management depends on this package.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.android.phone": {
+      "name": "Phone services",
+      "purposes": [
+        "system"
+      ],
+      "purpose": "Android telephony and mobile network services.",
+      "impact": "Calls and mobile connectivity depend on this package.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.honeyboard": {
+      "name": "Samsung Keyboard",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Samsung on-screen keyboard and input services.",
+      "impact": "Samsung text input will no longer be available.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.sec.android.app.launcher": {
+      "name": "One UI Home",
+      "purposes": [
+        "system"
+      ],
+      "purpose": "Samsung home screen and app launcher.",
+      "impact": "The home screen depends on the active launcher.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.kgclient": {
+      "name": "Knox Guard",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Samsung device management and security service.",
+      "impact": "Removing device-management components can break managed-device functions.",
+      "usefulness": "essential",
+      "advice": "keep",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.app.spage": {
+      "name": "Samsung Free",
+      "purposes": [
+        "entertainment"
+      ],
+      "purpose": "Samsung news and entertainment feed.",
+      "impact": "The Samsung Free feed will no longer be available.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.facebook.appmanager": {
+      "name": "Meta App Manager",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Supports management and updates of preloaded Meta apps.",
+      "impact": "Preloaded Meta app management may stop.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.facebook.system": {
+      "name": "Meta App Installer",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Supports installation of preloaded Meta apps.",
+      "impact": "Meta preload installation support may stop.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.facebook.services": {
+      "name": "Meta Services",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Background support for preloaded Meta integrations.",
+      "impact": "Some Meta preload integrations may stop.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.mygalaxy": {
+      "name": "My Galaxy",
+      "purposes": [
+        "money"
+      ],
+      "purpose": "Samsung regional offers and content.",
+      "impact": "Offers and content provided by My Galaxy will be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.mygalaxy.service": {
+      "name": "My Galaxy service",
+      "purposes": [
+        "money"
+      ],
+      "purpose": "Background support for My Galaxy content.",
+      "impact": "My Galaxy integrations may stop.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.kidsinstaller": {
+      "name": "Samsung Kids installer",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Installs or opens the Samsung Kids experience.",
+      "impact": "The Kids installation entry point will be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.bixby.agent": {
+      "name": "Bixby Voice",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Samsung voice assistant.",
+      "impact": "Bixby voice commands will be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.bixby.wakeup": {
+      "name": "Bixby wake-up",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Listens for the configured Bixby wake phrase.",
+      "impact": "Voice wake-up for Bixby will stop.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.visionintelligence": {
+      "name": "Bixby Vision",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Visual lookup and recognition for Samsung camera integrations.",
+      "impact": "Bixby visual lookup may be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.bixbyvision.framework": {
+      "name": "Bixby Vision framework",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Shared support for Bixby Vision.",
+      "impact": "Apps using Bixby Vision may lose visual lookup.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.sec.android.app.desktoplauncher": {
+      "name": "Samsung DeX launcher",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Desktop-style launcher for Samsung DeX.",
+      "impact": "DeX desktop launching may stop.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.sec.android.desktopmode.uiservice": {
+      "name": "Samsung DeX interface",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Desktop mode interface for Samsung DeX.",
+      "impact": "DeX desktop mode may stop working.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.scloud": {
+      "name": "Samsung Cloud",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Backup, recovery, and sync for supported Samsung data.",
+      "impact": "Samsung Cloud backup and sync may stop. Check existing backups first.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.app.watchmanagerstub": {
+      "name": "Galaxy Wearable installer",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "An installation entry point for Galaxy Wearable.",
+      "impact": "The preloaded Wearable shortcut may be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.spayfw": {
+      "name": "Samsung Pay framework",
+      "purposes": [
+        "money"
+      ],
+      "purpose": "Payment support for Samsung Wallet.",
+      "impact": "Samsung payment functions may stop.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.dkey": {
+      "name": "Samsung Digital Key",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Digital-key support for compatible devices and services.",
+      "impact": "Supported digital keys may stop working.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.samsung.android.carkey": {
+      "name": "Samsung Car Key",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Digital car-key integration.",
+      "impact": "Compatible car keys may stop working.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.whatsapp": {
+      "name": "WhatsApp",
+      "purposes": [
+        "communication"
+      ],
+      "purpose": "Messaging, voice calls, and video calls.",
+      "impact": "Messages and calls through WhatsApp will stop. Reinstall manually.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.instagram.android": {
+      "name": "Instagram",
+      "purposes": [
+        "communication"
+      ],
+      "purpose": "Photo and video sharing and messaging.",
+      "impact": "Instagram will be unavailable. Reinstall manually.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.google.android.youtube": {
+      "name": "YouTube",
+      "purposes": [
+        "entertainment"
+      ],
+      "purpose": "Streams videos from YouTube.",
+      "impact": "The YouTube app will be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.google.android.apps.maps": {
+      "name": "Google Maps",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Maps, navigation, and place search.",
+      "impact": "Maps navigation and offline maps in this app will be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.google.android.gm": {
+      "name": "Gmail",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Email with Gmail and supported mail accounts.",
+      "impact": "Gmail notifications and app-based email access will stop.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.google.android.apps.photos": {
+      "name": "Google Photos",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Photo browsing and optional cloud backup.",
+      "impact": "Photo backup through this app will stop. Check backup status first.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.android.chrome": {
+      "name": "Chrome",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Web browser from Google.",
+      "impact": "Chrome browsing and its saved local data may be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.brave.browser": {
+      "name": "Brave",
+      "purposes": [
+        "tools"
+      ],
+      "purpose": "Web browser with built-in privacy controls.",
+      "impact": "Brave browsing and its saved local data may be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "com.spotify.music": {
+      "name": "Spotify",
+      "purposes": [
+        "entertainment"
+      ],
+      "purpose": "Music and podcast streaming.",
+      "impact": "Spotify playback and offline downloads will be unavailable.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "org.telegram.messenger": {
+      "name": "Telegram",
+      "purposes": [
+        "communication"
+      ],
+      "purpose": "Messaging, channels, and calls.",
+      "impact": "Telegram notifications and calls will stop. Reinstall manually.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    },
+    "org.thoughtcrime.securesms": {
+      "name": "Signal",
+      "purposes": [
+        "communication"
+      ],
+      "purpose": "Private messaging and calls.",
+      "impact": "Signal messaging will stop. Check Signal backup and transfer options first.",
+      "usefulness": "optional",
+      "advice": "review required",
+      "confidence": "reviewed description"
+    }
+  }
+}

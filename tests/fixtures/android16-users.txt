@@ -1,0 +1,9 @@
+Current user: 10
+Users:
+  UserInfo{0:System:c10} serialNo=0
+    Type: android.os.usertype.system.HEADLESS
+  UserInfo{10:Personal:4403} serialNo=11
+    Type: android.os.usertype.full.SECONDARY
+    Flags: 17411 (ADMIN|FULL|MAIN|PRIMARY)
+  UserInfo{12:Work:1030} serialNo=13
+    Type: android.os.usertype.profile.MANAGED
