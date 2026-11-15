@@ -7,9 +7,9 @@ const categories = {
   tools: 'Tools & daily use', system: 'System', other: 'Other'
 };
 const state = {
-  devices: [], current: null, detail: null, inspecting: null,
-  detailSignature: null, deviceSignature: null, settings: {}, busy: false,
-  loadVersion: 0, rows: [],
+  devices: [], current: null, detail: null, tab: 'installed', selected: new Set(), inspecting: null,
+  detailSignature: null, deviceSignature: null, settings: {}, busy: false, activeBatch: null,
+  batchBusy: false, reviewBusy: false, loadVersion: 0, rows: [],
   dismissedNotice: null, editOriginal: null
 };
 const date = value => value ? new Date(value).toLocaleString([], {dateStyle:'medium', timeStyle:'short'}) : 'Never';
@@ -47,21 +47,25 @@ function selectPhone(id) {
   state.loadVersion++;
   state.detail = null;
   state.rows = [];
+  state.selected.clear();
   state.detailSignature = null;
   closeInspector();
   $('#edit-dialog').close();
+  $('#review-dialog').close();
   $('#device-workspace').hidden = true;
   $('#empty-device').hidden = !!id;
 }
 async function refresh(force = false) {
-  if (state.busy) return;
+  if (state.busy || state.reviewBusy) return;
   state.busy = true;
   $('#scan-button').disabled = true;
   $('#scan-button').textContent = 'Refreshing…';
   $('#empty-refresh').disabled = true;
   $('#empty-refresh').textContent = 'Searching…';
   try {
-    const result = await api('/api/refresh?force=' + force, {});
+    const result = state.activeBatch?.running
+      ? await api('/api/devices')
+      : await api('/api/refresh?force=' + force, {});
     state.devices = result.devices.sort((a,b) => Number(b.connection_state === 'Connected') - Number(a.connection_state === 'Connected') || (b.last_seen || '').localeCompare(a.last_seen || ''));
     const connected = state.devices.filter(d => d.connection_state === 'Connected');
     if (!connected.some(d => d.id === state.current)) {
@@ -118,13 +122,17 @@ async function loadDevice() {
     await refresh(true);
   });
   $('#installed-count').textContent = detail.packages.filter(p => p.installed).length;
+  $('#removed-count').textContent = detail.removed.length;
   renderRows();
+  if (state.tab === 'history') renderHistory();
   if (state.inspecting && $('#inspector').open && !$('#edit-dialog').open) inspect(state.inspecting);
 }
 function filteredRows() {
   if (!state.detail) return [];
+  const removed = new Map(state.detail.removed.map(row => [row.package, row]));
   const term = $('#search').value.toLowerCase().trim();
-  return state.detail.packages.filter(p => p.installed)
+  return state.detail.packages.filter(p => state.tab === 'removed' ? removed.has(p.id) : p.installed)
+    .map(p => ({...p, removal:removed.get(p.id)}))
     .filter(p => !term || [p.name,p.id,p.notes,p.purpose,...p.purposes.map(tag => categories[tag])].join(' ').toLowerCase().includes(term))
     .filter(p => !$('#filter-installation').value || p.installation === $('#filter-installation').value)
     .filter(p => !$('#filter-purpose').value || (p.purposes.length ? p.purposes : ['other']).includes($('#filter-purpose').value))
@@ -132,31 +140,61 @@ function filteredRows() {
     .filter(p => !$('#filter-state').value || p.state === $('#filter-state').value)
     .sort((a,b) => String(a[$('#sort').value]).localeCompare(String(b[$('#sort').value])) || a.id.localeCompare(b.id));
 }
+function canSelect(p) {
+  return state.tab === 'removed' ? p.removal?.eligible : p.installed && !p.protection && p.state !== 'unverified';
+}
 function renderRows() {
   const focused = document.activeElement?.dataset;
   state.rows = filteredRows();
+  const allIds = new Set(state.tab === 'removed'
+    ? state.detail.removed.map(r => r.package)
+    : state.detail.packages.filter(p => p.installed).map(p => p.id));
+  state.selected.forEach(id => { if (!allIds.has(id)) state.selected.delete(id); });
   $('#app-rows').innerHTML = state.rows.map(p => {
-    const rowStatus = p.protection ? 'Protected' : status(p.state);
-    return `<tr>
-      <td><button class="app-name" data-inspect="${e(p.id)}">${e(p.name)}</button><span class="app-category">${e(p.purposes.map(tag => categories[tag]).join(', ') || 'Other')}</span><span class="mobile-state">${e(rowStatus)}</span></td>
+    const rowStatus = state.tab === 'removed' ? p.removal.recovery : p.protection ? 'Protected' : status(p.state);
+    return `<tr class="${state.selected.has(p.id) ? 'selected' : ''}">
+      <td class="check-cell"><input type="checkbox" data-select="${e(p.id)}" aria-label="Select ${e(p.name)}" ${state.selected.has(p.id) ? 'checked' : ''} ${canSelect(p) ? '' : 'disabled'}></td>
+      <td><button class="app-name" data-inspect="${e(p.id)}">${e(p.name)}</button><span class="app-category">${e(p.purposes.map(tag => categories[tag]).join(', ') || 'Other')}</span>${state.tab === 'removed' ? `<span class="removed-date">Removed ${e(date(p.removal.removed_at))}</span>` : ''}<span class="mobile-state">${e(rowStatus)}</span></td>
       <td class="type-col">${e(appType(p.installation))}</td>
-      <td class="state-col"><span class="${p.protection ? 'protected-label' : 'state-text'}">${e(rowStatus)}</span></td>
+      <td class="state-col"><span class="${p.protection && state.tab === 'installed' ? 'protected-label' : 'state-text'}">${e(rowStatus)}</span>${state.tab === 'removed' ? `<span class="removed-date">${e(status(p.state))}</span>` : ''}</td>
     </tr>`;
   }).join('');
   $('#result-count').textContent = `${state.rows.length} ${state.rows.length === 1 ? 'app' : 'apps'}`;
   $('#no-results').hidden = state.rows.length > 0;
-  $('#no-results').textContent = 'No matching apps. Try another search or reset the filters.';
-  if (focused?.inspect) $(`[data-inspect="${focused.inspect}"]`)?.focus({preventScroll:true});
+  $('#no-results').textContent = state.tab === 'removed' && !state.detail.removed.length
+    ? 'Apps you remove will appear here.' : 'No matching apps. Try another search or reset the filters.';
+  renderSelection();
+  if (focused?.select) $(`[data-select="${focused.select}"]`)?.focus({preventScroll:true});
+  else if (focused?.inspect) $(`[data-inspect="${focused.inspect}"]`)?.focus({preventScroll:true});
+}
+function renderSelection() {
+  const eligible = state.rows.filter(canSelect);
+  $('#select-all').checked = eligible.length > 0 && eligible.every(p => state.selected.has(p.id));
+  $('#select-all').indeterminate = eligible.some(p => state.selected.has(p.id)) && !$('#select-all').checked;
+  $('#select-all').disabled = !eligible.length;
+  $$('[data-select]').forEach(box => {
+    box.checked = state.selected.has(box.dataset.select);
+    box.closest('tr').classList.toggle('selected', box.checked);
+  });
+  $('#selection-count').textContent = state.selected.size ? `${state.selected.size} selected` : `Select apps to ${state.tab === 'removed' ? 'restore' : 'uninstall'}`;
+  $('#clear-selection').hidden = !state.selected.size;
+  $('#review-button').textContent = state.tab === 'removed' ? 'Review restore' : 'Review uninstall';
+  $('#review-button').disabled = state.reviewBusy || !state.selected.size || !state.detail?.connected || state.detail.device.blockers.length > 0 || state.detail.device.reconciliation_required || !!state.activeBatch?.running;
 }
 function inspect(id) {
   const p = state.detail.packages.find(p => p.id === id);
   if (!p) return;
   state.inspecting = id;
+  const removed = state.detail.removed.find(r => r.package === id);
+  const recovery = removed?.recovery || (p.installation === 'system'
+    ? 'You can restore this app while its system package remains on your phone.'
+    : 'You will need to reinstall this app yourself.');
   const tags = [appType(p.installation), status(p.state), ...p.purposes.map(tag => categories[tag])];
   $('#app-details').innerHTML = `<h2 id="app-title">${e(p.name)}</h2><p class="package-id">${e(p.id)}</p><button class="quiet copy" id="copy-package">Copy package ID</button>
     <div class="detail-tags">${tags.map(t => `<span class="tag">${e(t)}</span>`).join('')}</div>
     <p class="app-description">${e(p.purpose)}</p>${p.protection ? `<p class="warning">${e(p.protection)}</p>` : ''}
     <section><h3>If you uninstall</h3><p>${e(p.impact)}</p></section>
+    <section><h3>Getting it back</h3><p>${e(recovery)}</p>${removed ? `<p>Removed ${e(date(removed.removed_at))}</p>` : ''}${removed && p.installer === 'com.android.vending' ? `<a href="https://play.google.com/store/apps/details?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener noreferrer">Find on Google Play</a>` : ''}</section>
     ${p.notes ? `<section><h3>Your notes</h3><p>${e(p.notes)}</p></section>` : ''}
     <details><summary>Technical details</summary><p>Version ${e(p.version ?? 'unknown')}<br>Usefulness: ${e(title(p.usefulness))}<br>Source: ${e(p.source)}<br>Confidence: ${e(p.confidence)}<br>Name source: ${e(p.name_source)}</p></details>
     <button id="edit-button" class="edit-button">Edit details</button>`;
@@ -185,6 +223,104 @@ function openEditor() {
   $('#edit-purposes').innerHTML = Object.entries(categories).map(([tag, label]) => `<label><input type="checkbox" value="${e(tag)}" ${p.purposes.includes(tag) ? 'checked' : ''}>${e(label)}</label>`).join('');
   state.editOriginal = editorValues();
   $('#edit-dialog').showModal();
+}
+function renderHistory() {
+  const groups = new Map();
+  for (const entry of [...state.detail.device.history].reverse()) {
+    if (!groups.has(entry.batch_id)) groups.set(entry.batch_id, []);
+    groups.get(entry.batch_id).push(entry);
+  }
+  $('#history-view').innerHTML = !groups.size ? '<div class="empty-results">Your uninstalls and restores will appear here.</div>' : [...groups.values()].map(entries => `<article class="history-batch"><h3>${entries[0].action === 'uninstall' ? 'Uninstall' : 'Restore'}</h3><p class="muted">${e(date(entries[0].timestamp))}</p>${entries.reverse().map(entry => `<div class="history-entry"><strong>${e(state.detail.packages.find(p => p.id === entry.package)?.name || entry.package)}</strong> <span class="tag outcome-${e(entry.status)}">${e(title(entry.status))}</span><p>${e(entry.verification || entry.outcome || 'Not attempted.')}</p><details><summary>Details</summary><p>${e(entry.package)}<br>Recovery: ${e(entry.recovery)}<br>Before: ${e(status(entry.before.state))}<br>Version: ${e(entry.before.version)}<br>User: ${e(entry.user_id)}</p><code>${e(entry.command.join(' '))}</code><p>${e(entry.outcome)}</p>${entry.observed_at ? `<p>Last seen ${e(status(entry.observed_state))} on ${e(date(entry.observed_at))}. The cause of an external change is unknown.</p>` : ''}</details></div>`).join('')}</article>`).join('');
+}
+async function review() {
+  if (state.reviewBusy) return;
+  state.reviewBusy = true;
+  const action = state.tab === 'removed' ? 'restore' : 'uninstall';
+  $('#review-button').disabled = true;
+  $('#review-content').innerHTML = `<h2 id="review-title">Review ${action}</h2><p role="status">Preparing your selection…</p>`;
+  $('#review-dialog').showModal();
+  try {
+    const plan = await api(`/api/devices/${state.current}/review`, {action, packages:[...state.selected]});
+    if (!$('#review-dialog').open) return;
+    const count = plan.packages.length;
+    $('#review-content').innerHTML = `<h2 id="review-title">${title(plan.action)} ${count} ${count === 1 ? 'app' : 'apps'}?</h2>
+      <p class="muted">${e(plan.device_name)}</p>
+      <p>${plan.action === 'uninstall' ? 'App data may be kept, but this is not a backup or a guarantee of recovery.' : 'This brings back the system app, including its previous enabled or disabled setting. It does not restore backed-up data or an exact app version.'}</p>
+      ${plan.packages.map(p => {
+        const described = state.detail.packages.find(item => item.id === p.id);
+        const recovery = plan.action === 'uninstall'
+          ? (p.installation === 'system' ? 'Can be restored while available on this phone.' : 'Manual reinstall required.')
+          : (plan.previous_enabled[p.id] >= 2 ? 'Will be restored disabled, as before.' : 'Will be restored enabled.');
+        return `<div class="review-row"><strong>${e(described?.name || p.id)}</strong>${described?.name !== p.id ? `<p class="package-id">${e(p.id)}</p>` : ''}<p>${e(described?.impact || '')}</p><p>${e(recovery)}</p>${plan.action === 'uninstall' && p.state === 'installed/disabled' ? '<p>Currently disabled</p>' : ''}</div>`;
+      }).join('')}
+      ${Object.keys(plan.excluded).length ? `<section class="warning"><h3>These apps will stay</h3>${Object.entries(plan.excluded).map(([pkg, reason]) => `<p>${e(pkg)}: ${e(reason)}</p>`).join('')}</section>` : ''}
+      <p class="muted">Your phone is checked again before changes begin.</p>
+      ${state.settings.read_only ? '<p class="warning">Read-only mode. Changes are turned off.</p>' : ''}
+      <div class="dialog-actions"><button id="cancel-review">Back</button><button id="confirm-plan" class="${plan.action === 'uninstall' ? 'danger' : 'primary'}" ${!count || state.settings.read_only ? 'disabled' : ''}>${title(plan.action)} ${count} ${count === 1 ? 'app' : 'apps'}</button></div>`;
+    $('#cancel-review').onclick = () => $('#review-dialog').close();
+    $('#confirm-plan').onclick = handle(async () => {
+      $('#confirm-plan').disabled = true;
+      $('#confirm-plan').textContent = 'Checking phone…';
+      $('#cancel-review').disabled = true;
+      try {
+        state.activeBatch = await api(`/api/plans/${plan.id}/confirm`, {});
+        state.selected.clear();
+        $('#review-dialog').close();
+        renderBatch();
+        renderSelection();
+        await pollBatch();
+      } catch (error) {
+        $('#review-dialog').close();
+        throw error;
+      }
+    });
+  } catch (error) {
+    if ($('#review-dialog').open) {
+      $('#review-content').innerHTML = `<h2 id="review-title">Couldn't prepare review</h2><p role="alert">${e(error.message)}</p><div class="dialog-actions"><button id="cancel-review">Back to apps</button></div>`;
+      $('#cancel-review').onclick = () => $('#review-dialog').close();
+    } else notice(error.message);
+  } finally {
+    state.reviewBusy = false;
+    renderSelection();
+  }
+}
+function renderBatch() {
+  const batch = state.activeBatch;
+  $('#batch').hidden = !batch;
+  if (!batch) return;
+  $('#batch').classList.toggle('finished', !batch.running);
+  if (!batch.running) {
+    const succeeded = batch.entries.filter(entry => entry.status === 'succeeded').length;
+    const total = batch.entries.length;
+    const complete = succeeded === total && !batch.error;
+    const action = batch.action === 'uninstall' ? 'Removal' : 'Restore';
+    const summary = complete
+      ? `${batch.action === 'uninstall' ? 'Removed' : 'Restored'} ${succeeded} ${succeeded === 1 ? 'app' : 'apps'}`
+      : `${action} ${succeeded === total ? 'needs attention' : `incomplete. ${succeeded} of ${total} confirmed`}`;
+    $('#batch').innerHTML = `<div class="batch-top"><strong class="${complete ? 'outcome-succeeded' : 'outcome-unverified'}">${e(summary)}</strong><div class="batch-actions"><button id="batch-history" class="quiet">View history</button><button id="dismiss-batch" class="quiet" aria-label="Dismiss result">Dismiss</button></div></div>${batch.error ? `<p>${e(batch.error)}</p>` : ''}`;
+    $('#batch-history').onclick = handle(async () => {
+      selectPhone(batch.device_id);
+      await loadDevice();
+      $('[data-tab="history"]').click();
+    });
+    $('#dismiss-batch').onclick = () => { state.activeBatch = null; renderBatch(); };
+    return;
+  }
+  const done = batch.entries.filter(entry => !['pending','attempting'].includes(entry.status)).length;
+  $('#batch').innerHTML = `<div class="batch-top"><div><strong>${batch.action === 'uninstall' ? 'Uninstalling apps' : 'Restoring apps'}</strong><p>${e(batch.device_name)}</p></div><button id="stop-batch" ${batch.stop_requested ? 'disabled' : ''}>${batch.stop_requested ? 'Stopping after this app' : 'Stop after this app'}</button></div><progress value="${done}" max="${batch.entries.length || 1}" aria-label="Apps processed"></progress><p>${done} of ${batch.entries.length} apps${batch.error ? '. ' + e(batch.error) : ''}</p><ul>${batch.entries.map(entry => `<li class="outcome-${e(entry.status)}">${e(state.detail?.packages.find(p => p.id === entry.package)?.name || entry.package)}: ${e(title(entry.status))}${entry.verification ? '. ' + e(entry.verification) : ''}</li>`).join('')}</ul>`;
+  $('#stop-batch').onclick = handle(async () => {
+    state.activeBatch = await api(`/api/batches/${batch.id}/stop`, {});
+    renderBatch();
+  });
+}
+async function pollBatch() {
+  if (!state.activeBatch?.running || state.batchBusy) return;
+  state.batchBusy = true;
+  try {
+    state.activeBatch = await api('/api/batches/' + state.activeBatch.id);
+    renderBatch();
+    if (!state.activeBatch.running) { await loadDevice(); await refresh(true); }
+  } finally { state.batchBusy = false; }
 }
 async function openSettings() {
   state.settings = await api('/api/settings');
@@ -236,10 +372,32 @@ $('#clear-filters').onclick = () => {
   $('#filters-button').textContent = 'Filters';
   if (state.detail) renderRows();
 };
+$('#clear-selection').onclick = () => { state.selected.clear(); renderSelection(); };
+$('#select-all').onchange = event => {
+  state.rows.filter(canSelect).forEach(p => event.target.checked ? state.selected.add(p.id) : state.selected.delete(p.id));
+  renderSelection();
+};
+$('#app-rows').onchange = event => {
+  const box = event.target.closest('[data-select]');
+  if (!box) return;
+  box.checked ? state.selected.add(box.dataset.select) : state.selected.delete(box.dataset.select);
+  renderSelection();
+};
 $('#app-rows').onclick = event => {
   const button = event.target.closest('[data-inspect]');
   if (button) inspect(button.dataset.inspect);
 };
+$$('[data-tab]').forEach(button => button.onclick = () => {
+  state.tab = button.dataset.tab;
+  state.selected.clear();
+  $$('[data-tab]').forEach(b => {
+    b.classList.toggle('active', b === button);
+    b.setAttribute('aria-current', b === button ? 'page' : 'false');
+  });
+  $('#inventory-view').hidden = state.tab === 'history';
+  $('#history-view').hidden = state.tab !== 'history';
+  if (state.detail) { if (state.tab === 'history') renderHistory(); else renderRows(); }
+});
 $('#phone-select').onchange = handle(async event => { selectPhone(event.target.value); await loadDevice(); });
 $('#empty-refresh').onclick = handle(() => refresh(true));
 $('#scan-button').onclick = handle(() => refresh(true));
@@ -248,6 +406,7 @@ $('#dismiss-notice').onclick = () => {
   state.dismissedNotice = $('#notice-message').textContent;
   $('#notice').hidden = true;
 };
+$('#review-button').onclick = handle(review);
 $('#inspector').onclose = () => { state.inspecting = null; };
 $('#edit-form').onsubmit = handle(async event => {
   event.preventDefault();
@@ -272,7 +431,10 @@ $('#reset-override').onclick = handle(async () => {
 async function start() {
   state.settings = await api('/api/settings');
   $('#mode').hidden = !state.settings.read_only;
+  const current = await api('/api/batches/current');
+  if (current?.id) { state.activeBatch = current; renderBatch(); }
   await refresh(true);
 }
 handle(start)();
 setInterval(handle(() => { if (!document.hidden && !$('dialog[open]')) return refresh(); }, true), 15000);
+setInterval(handle(pollBatch, true), 1000);

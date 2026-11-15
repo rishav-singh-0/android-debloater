@@ -46,3 +46,41 @@ def reconcile(device: Device, inventory: dict[str, Package]):
             event.observed_at = now()
     device.inventory = inventory
     device.scanned_at = now()
+
+
+def removed_entries(device: Device, connected: bool):
+    latest = {}
+    for event in device.history:
+        if event.action == "uninstall" and event.status in {"succeeded", "unverified"}:
+            latest[event.package] = event
+    result = []
+    for name, event in latest.items():
+        p = device.inventory.get(name)
+        eligible = False
+        if event.user_key != device.user_key or device.reconciliation_required:
+            recovery = "Previous profile history. Recovery is blocked."
+        elif not connected or device.blockers or not device.scanned_at:
+            recovery = "Connect to check restore availability"
+        elif p and p.installed:
+            recovery = "Installed again"
+        elif event.status != "succeeded":
+            recovery = "Removal was not verified. Review the observed state in History."
+        elif event.before.installation != "system":
+            recovery = "Manual reinstall required"
+        elif not p or not p.available or p.installation != "system":
+            recovery = "Unavailable for restore"
+        else:
+            recovery = "Available for restore"
+            eligible = True
+        result.append(
+            {
+                "package": name,
+                "removed_at": event.timestamp,
+                "recovery": recovery,
+                "eligible": eligible,
+                "previous_enabled": event.before.enabled,
+                "installation": event.before.installation,
+                "event_id": event.id,
+            }
+        )
+    return result

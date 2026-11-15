@@ -88,6 +88,7 @@ def test_api_workflow_overrides_protection_and_restart(tmp_path):
         device_id = response.json()["devices"][0]["id"]
         detail = client.get("/api/devices/" + device_id).json()
         assert len(detail["packages"]) == 5
+        assert not detail["removed"]
         url = f"/api/devices/{device_id}/overrides/com.example.system"
         assert (
             client.post(
@@ -105,15 +106,80 @@ def test_api_workflow_overrides_protection_and_restart(tmp_path):
         )
         assert row["name"] == "Device name" and row["usefulness"] == "optional"
         assert client.post(url, json={"installation": "third-party"}, headers=headers).status_code == 422
-        assert not adb.mutations
+        assert (
+            client.post(
+                f"/api/devices/{device_id}/review",
+                json={"action": "uninstall", "packages": ["com.foo;reboot"]},
+                headers=headers,
+            ).status_code
+            == 422
+        )
+        core = f"/api/devices/{device_id}/overrides/com.android.systemui"
+        client.post(core, json={"usefulness": "suspected bloatware"}, headers=headers)
+        plan = client.post(
+            f"/api/devices/{device_id}/review",
+            json={"action": "uninstall", "packages": ["com.android.systemui", "com.example.system"]},
+            headers=headers,
+        ).json()
+        assert "com.android.systemui" in plan["excluded"]
+        assert client.get("/api/plans/" + plan["id"] + "/confirm").status_code == 405
+        assert client.post("/api/plans/" + plan["id"] + "/confirm", json={}).status_code == 403
+        assert (
+            client.post(
+                "/api/plans/" + plan["id"] + "/confirm",
+                json={},
+                headers={**headers, "Origin": "http://evil.example"},
+            ).status_code
+            == 403
+        )
+        batch = client.post("/api/plans/" + plan["id"] + "/confirm", json={}, headers=headers).json()
+        app.state.operations.worker.join(5)
+        assert client.get("/api/batches/" + batch["id"]).json()["entries"][0]["status"] == "succeeded"
     restarted = create_app(tmp_path, adb=adb)
     with TestClient(restarted, base_url=base) as client:
         detail = client.get("/api/devices/" + device_id).json()
         assert not detail["connected"]
-        row = next(p for p in detail["packages"] if p["id"] == "com.example.system")
-        assert row["name"] == "Device name"
-        assert next(p for p in detail["packages"] if p["id"] == "com.android.systemui")["protection"]
-        assert not adb.mutations
+        assert detail["removed"][0]["recovery"] == "Connect to check restore availability"
+        headers = {"Origin": base, "X-Session-Token": restarted.state.token}
+        assert (
+            client.post("/api/plans/" + plan["id"] + "/confirm", json={}, headers=headers).status_code == 409
+        )
+        client.post("/api/refresh", json={}, headers=headers)
+        detail = client.get("/api/devices/" + device_id).json()
+        assert detail["removed"][0]["eligible"]
+        assert len(adb.mutations) == 1
+
+
+def test_restart_marks_attempts_interrupted_before_reconnect(tmp_path):
+    from fakes import FakeAdb
+
+    from android_debloater.models import Device, Operation, Package
+    from android_debloater.storage import Store
+
+    store = Store(tmp_path)
+    store.open()
+    device = Device()
+    package = Package(id="com.example.system")
+    device.history = [
+        Operation(
+            batch_id="old",
+            action="uninstall",
+            package=package.id,
+            user_id=0,
+            user_key="old-profile",
+            before=package,
+            recovery="system",
+            status=status,
+        )
+        for status in ["attempting", "pending"]
+    ]
+    store.save(device)
+    store.close()
+    app = create_app(tmp_path, adb=FakeAdb())
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        data = client.get("/api/devices/" + device.id).json()
+        assert [e["status"] for e in data["device"]["history"]] == ["unverified", "unattempted"]
+        assert "interrupted" in data["device"]["history"][0]["verification"].lower()
 
 
 def test_missing_saved_adb_keeps_settings_accessible(tmp_path):

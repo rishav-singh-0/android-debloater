@@ -143,6 +143,11 @@ class GlobalOverrides(Record):
     packages: dict[PackageId, Override] = Field(default_factory=dict)
 
 
+class ReviewRequest(Record):
+    action: Literal["uninstall", "restore"]
+    packages: list[PackageId] = Field(min_length=1, max_length=1000)
+
+
 class EditOverride(Override):
     scope: Literal["device", "global"] = "device"
 
@@ -153,3 +158,21 @@ class NicknameRequest(Record):
 
 class MatchRequest(Record):
     transport: str = Field(min_length=1, max_length=255)
+
+
+class Plan(Record):
+    id: str = Field(default_factory=new_id)
+    device_id: str
+    device_name: str
+    user_id: int
+    user_key: str
+    fingerprint: str
+    reset_key: str
+    action: Literal["uninstall", "restore"]
+    created_at: str = Field(default_factory=now)
+    expires_at: str
+    packages: list[Package]
+    recovery: dict[str, str]
+    previous_enabled: dict[str, int | None]
+    excluded: dict[str, str]
+    batch_id: str | None = None

@@ -12,7 +12,9 @@ from fastapi.templating import Jinja2Templates
 from .adb import Adb, AdbError
 from .catalog import Catalog
 from .devices import Devices
-from .models import EditOverride, MatchRequest, NicknameRequest, Override, Settings
+from .inventory import removed_entries
+from .models import EditOverride, MatchRequest, NicknameRequest, Override, ReviewRequest, Settings
+from .operations import Operations
 from .protection import reason
 from .storage import StorageError, Store
 
@@ -21,21 +23,26 @@ def create_app(data_dir: Path, *, port=8765, adb_path=None, read_only=False, adb
     store = Store(data_dir)
     catalog = Catalog()
     devices = None
+    operations = None
     token = secrets.token_urlsafe(32)
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     origins = {f"http://{host}" for host in allowed_hosts}
 
     @asynccontextmanager
     async def lifespan(app):
-        nonlocal devices
+        nonlocal devices, operations
         store.open()
         try:
             devices = Devices(store, adb or Adb(adb_path or store.settings.adb_path, read_only=read_only))
             if read_only:
                 devices.adb.read_only = True
             app.state.devices = devices
+            operations = Operations(devices)
+            app.state.operations = operations
             yield
         finally:
+            if operations:
+                operations.close()
             store.close()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -105,6 +112,7 @@ def create_app(data_dir: Path, *, port=8765, adb_path=None, read_only=False, adb
             "pending": devices.pending,
             "error": devices.error,
             "storage_errors": store.errors,
+            "active_batch": devices.active,
         }
 
     @app.post("/api/refresh")
@@ -127,6 +135,7 @@ def create_app(data_dir: Path, *, port=8765, adb_path=None, read_only=False, adb
         return {
             "device": device,
             "packages": packages,
+            "removed": removed_entries(device, devices.connected(device_id)),
             "connected": devices.connected(device_id),
         }
 
@@ -200,5 +209,25 @@ def create_app(data_dir: Path, *, port=8765, adb_path=None, read_only=False, adb
             overrides.packages.pop(package, None)
             store.save_overrides(overrides)
         return {"ok": True}
+
+    @app.post("/api/devices/{device_id}/review")
+    def review(device_id: str, body: ReviewRequest):
+        return operations.review(device_id, body)
+
+    @app.post("/api/plans/{plan_id}/confirm")
+    def confirm(plan_id: str):
+        return operations.confirm(plan_id)
+
+    @app.get("/api/batches/current")
+    def current_batch():
+        return operations.get_batch()
+
+    @app.get("/api/batches/{batch_id}")
+    def batch(batch_id: str):
+        return operations.get_batch(batch_id)
+
+    @app.post("/api/batches/{batch_id}/stop")
+    def stop(batch_id: str):
+        return operations.cancel(batch_id)
 
     return app

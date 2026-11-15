@@ -31,7 +31,7 @@ context.detail = {
     installation:'system', state:'installed/enabled', notes:'', purpose:'', usefulness:'optional'
   }))
 };
-vm.runInContext("state.detail = detail; state.current = 'one';", context);
+vm.runInContext("state.detail = detail; state.current = 'one'; state.tab = 'installed';", context);
 element('#sort').value = 'name';
 element('#filter-purpose').value = 'money';
 assert.equal(vm.runInContext('filteredRows().length', context), 1);
@@ -48,6 +48,34 @@ assert.equal(element('#search').value, '');
 vm.runInContext("state.inspecting = 'com.example.app1'; openEditor();", context);
 assert.equal((element('#edit-purposes').innerHTML.match(/type="checkbox"/g) || []).length, 6);
 assert.match(element('#edit-purposes').innerHTML, /value="tools" checked/);
+function render(statuses, overrides = {}) {
+  const batch = {id: 'test', device_id: 'one', device_name: 'Demo phone', action: 'uninstall', running: false, error: '', entries: statuses.map((status, i) => ({status, package: `com.example.app${i}`, verification: 'Verified result'})), ...overrides};
+  vm.runInContext(`state.current = 'one'; state.activeBatch = ${JSON.stringify(batch)}; renderBatch();`, context);
+  return element('#batch').innerHTML;
+}
+let html = render(['succeeded']);
+assert.match(html, /Removed 1 app/);
+assert.doesNotMatch(html, /<progress|<ul|Demo phone|Verified result/);
+assert.match(html, /View history/);
+html = render(Array(200).fill('succeeded'));
+assert.match(html, /Removed 200 apps/);
+assert.ok(html.length < 600, 'Completed results must stay compact for a large batch');
+html = render(['succeeded'], {action: 'restore'});
+assert.match(html, /Restored 1 app/);
+for (const status of ['failed', 'unverified', 'partial', 'cancelled', 'unattempted']) {
+  html = render(['succeeded', status]);
+  assert.match(html, /1 of 2 confirmed/);
+  assert.match(html, /incomplete/);
+  assert.doesNotMatch(html, /Removed 2 apps/);
+}
+html = render(['succeeded'], {error: '<Storage unavailable>'});
+assert.match(html, /needs attention/);
+assert.match(html, /&lt;Storage unavailable&gt;/);
+html = render(['attempting', 'pending'], {running: true});
+assert.match(html, /Uninstalling apps/);
+assert.match(html, /stop-batch/);
+assert.match(html, /<progress/);
+render(['succeeded']);
 (async () => {
   context.fetch = async () => { throw new TypeError('Failed to fetch'); };
   await assert.rejects(vm.runInContext("api('/api/settings')", context), /Can't reach Android Debloater/);
@@ -84,7 +112,8 @@ assert.match(element('#edit-purposes').innerHTML, /value="tools" checked/);
   vm.runInContext('api = () => pendingDetail;', context);
   const staleLoad = vm.runInContext('loadDevice()', context);
   vm.runInContext(`
-    $('#inspector').showModal(); $('#edit-dialog').showModal();
+    state.selected.add('com.example.app1');
+    $('#inspector').showModal(); $('#edit-dialog').showModal(); $('#review-dialog').showModal();
     api = async path => path.startsWith('/api/refresh') ? discovery : detail;
   `, context);
   context.discovery.devices[0].connection_state = 'Disconnected';
@@ -92,7 +121,8 @@ assert.match(element('#edit-purposes').innerHTML, /value="tools" checked/);
   assert.equal(element('#device-workspace').hidden, true, 'Unplugging must hide the previous phone');
   assert.equal(element('#empty-device').hidden, false);
   assert.equal(vm.runInContext('state.detail', context), null);
-  for (const dialog of ['#inspector', '#edit-dialog']) assert.equal(element(dialog).open, false);
+  assert.equal(vm.runInContext('state.selected.size', context), 0);
+  for (const dialog of ['#inspector', '#edit-dialog', '#review-dialog']) assert.equal(element(dialog).open, false);
   resolveDetail(context.detail);
   await staleLoad;
   assert.equal(element('#device-workspace').hidden, true, 'An old app-info response must not reopen a disconnected phone');
@@ -119,6 +149,11 @@ assert.match(element('#edit-purposes').innerHTML, /value="tools" checked/);
   assert.equal(element('#empty-refresh').textContent, 'Search for device');
   assert.equal(element('#empty-device').hidden, false);
 
+  vm.runInContext('loadDevice = async () => {};', context);
+  await element('#batch-history').onclick();
+  assert.equal(element('[data-tab="history"]').clicked, true);
+  element('#dismiss-batch').onclick();
+  assert.equal(element('#batch').hidden, true);
   context.savedEdits = [];
   context.checkedPurposes = ['other'];
   context.document.querySelectorAll = selector => selector === '#edit-purposes input:checked'
@@ -150,5 +185,5 @@ assert.match(element('#edit-purposes').innerHTML, /value="tools" checked/);
   assert.deepEqual(savedBody(), {scope:'device', name:null, purposes:[]}, 'Explicit field clearing must still work');
   await element('#reset-override').onclick();
   assert.deepEqual(savedBody(), {scope:'device'}, 'Reset must still clear the whole override');
-  console.log('Inventory and app-detail UI checks passed.');
+  console.log('Inventory, app details, and operation UI checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

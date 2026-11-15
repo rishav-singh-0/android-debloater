@@ -1,7 +1,7 @@
 [project]
 name = "android-debloater"
 version = "0.1.0"
-description = "Local Android package inventory and personal app details"
+description = "Local Android package inventory, reviewed removal, and system-app recovery"
 readme = "README.md"
 authors = [
     { name = "Rishav Singh", email = "rishav.singh2@arm.com" }

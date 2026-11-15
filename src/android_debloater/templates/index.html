@@ -34,7 +34,12 @@
         </div>
       </div>
       <div id="device-warning" class="warning" hidden></div>
-      <h2>Installed <span id="installed-count"></span></h2>
+      <div id="batch" class="batch" aria-live="polite" hidden></div>
+      <nav class="tabs" aria-label="App views">
+        <button data-tab="installed" class="active" aria-current="page">Installed <span id="installed-count"></span></button>
+        <button data-tab="removed">Removed <span id="removed-count"></span></button>
+        <button data-tab="history">History</button>
+      </nav>
       <div id="inventory-view">
         <div class="search-row">
           <label class="search"><span class="sr-only">Search apps</span><input id="search" type="search" placeholder="Search apps" autocomplete="off"></label>
@@ -45,18 +50,24 @@
         <div id="filters" class="filters" hidden>
           <label>Type<select id="filter-installation"><option value="">All types</option><option value="system">System</option><option value="third-party">Downloaded</option><option value="unknown">Unknown</option></select></label>
           <label>Usefulness<select id="filter-usefulness"><option value="">Any usefulness</option><option value="essential">Essential</option><option value="optional">Optional</option><option value="suspected bloatware">Suspected bloatware</option><option value="unknown">Unknown</option></select></label>
-          <label>Status<select id="filter-state"><option value="">All statuses</option><option value="installed/enabled">Enabled</option><option value="installed/disabled">Disabled</option><option value="unverified">Needs checking</option></select></label>
+          <label>Status<select id="filter-state"><option value="">All statuses</option><option value="installed/enabled">Enabled</option><option value="installed/disabled">Disabled</option><option value="removed">Removed</option><option value="unavailable">Unavailable</option><option value="unverified">Needs checking</option></select></label>
           <label>Sort by<select id="sort"><option value="name">App name</option><option value="id">Package ID</option><option value="installation">Type</option><option value="state">Status</option></select></label>
           <button id="clear-filters" class="quiet">Reset filters</button>
         </div>
         <div class="table-wrap">
-          <table><thead><tr><th>App</th><th class="type-col">Type</th><th class="state-col">Status</th></tr></thead><tbody id="app-rows"></tbody></table>
+          <table><thead><tr><th class="check-cell"><input id="select-all" type="checkbox" aria-label="Select all eligible apps in current results"></th><th>App</th><th class="type-col">Type</th><th class="state-col">Status</th></tr></thead><tbody id="app-rows"></tbody></table>
           <div id="no-results" class="empty-results" hidden></div>
         </div>
+        <div class="selection-bar">
+          <div><strong id="selection-count">Select apps to uninstall</strong><button id="clear-selection" class="quiet" hidden>Clear</button></div>
+          <button id="review-button" class="primary" disabled>Review uninstall</button>
+        </div>
       </div>
+      <section id="history-view" hidden aria-label="History"></section>
     </div>
   </main>
   <dialog id="inspector" aria-labelledby="app-title"><form method="dialog" class="dialog-close"><button aria-label="Close app details">×</button></form><div id="app-details"></div></dialog>
+  <dialog id="review-dialog" aria-labelledby="review-title"><form method="dialog" class="dialog-close"><button aria-label="Close review">×</button></form><div id="review-content"></div></dialog>
   <dialog id="edit-dialog" aria-labelledby="edit-title">
     <form method="dialog" class="dialog-close"><button aria-label="Close editor">×</button></form>
     <h2 id="edit-title">Edit app details</h2>
